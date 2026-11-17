@@ -11,18 +11,19 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Just enough of Jellyfin for the TV shortcuts: the first Continue watching / Next up item, and a
+ * Just enough of Jellyfin for the TV shortcuts: Continue watching / Next up with pictures, and a
  * Quick Connect sign-in (as rxhome-tv's launcher does it) to get a token.
  */
 final class Jellyfin {
 
     static final class Item {
-        final String id, title, episode; // episode: "S2:E5", or "" for a film
+        final String id, title, episode, image; // episode: "S2:E5", or "" for a film; image: a picture URL
 
-        Item(String id, String title, String episode) {
+        Item(String id, String title, String episode, String image) {
             this.id = id;
             this.title = title;
             this.episode = episode;
+            this.image = image;
         }
 
         String label() {
@@ -57,14 +58,19 @@ final class Jellyfin {
         this.deviceId = deviceId;
     }
 
-    /** First item of Continue watching, or null. */
-    Item resume() throws IOException {
-        return first(send("GET", url + "/UserItems/Resume?UserId=" + userId + "&Limit=1&MediaTypes=Video", null, url, token, deviceId));
+    /** Continue watching (up to 20). */
+    java.util.List<Item> resumeAll() throws IOException {
+        return all(send("GET", url + "/UserItems/Resume?UserId=" + userId + "&Limit=20&MediaTypes=Video", null, url, token, deviceId), url);
     }
 
-    /** First item of Next up, or null. */
-    Item nextUp() throws IOException {
-        return first(send("GET", url + "/Shows/NextUp?UserId=" + userId + "&Limit=1", null, url, token, deviceId));
+    /** Next up (up to 20). */
+    java.util.List<Item> nextUpAll() throws IOException {
+        return all(send("GET", url + "/Shows/NextUp?UserId=" + userId + "&Limit=20", null, url, token, deviceId), url);
+    }
+
+    /** Fetches a picture with the login (some servers want it for images too). */
+    byte[] image(String imageUrl) throws IOException {
+        return sendBytes(imageUrl, token, deviceId);
     }
 
     /** Quick Connect, step 1: a code to approve in a signed-in Jellyfin app. */
@@ -81,17 +87,23 @@ final class Jellyfin {
         return login(send("POST", url + "/Users/AuthenticateWithQuickConnect", "{\"Secret\":\"" + secret + "\"}", url, null, deviceId));
     }
 
-    static Item first(String json) {
+    /** Every item of a Resume / NextUp reply, with picture URLs on `server`; empty if unreadable. */
+    static java.util.List<Item> all(String json, String server) {
+        java.util.List<Item> out = new java.util.ArrayList<>();
         try {
             JSONArray items = new JSONObject(json).getJSONArray("Items");
-            if (items.length() == 0) return null;
-            JSONObject it = items.getJSONObject(0);
-            boolean episode = "Episode".equals(it.optString("Type"));
-            return new Item(it.getString("Id"), episode ? it.optString("SeriesName") : it.optString("Name"),
-                episode ? "S" + it.optInt("ParentIndexNumber") + ":E" + it.optInt("IndexNumber") : "");
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject it = items.getJSONObject(i);
+                String id = it.getString("Id");
+                boolean episode = "Episode".equals(it.optString("Type"));
+                out.add(new Item(id, episode ? it.optString("SeriesName") : it.optString("Name"),
+                    episode ? "S" + it.optInt("ParentIndexNumber") + ":E" + it.optInt("IndexNumber") : "",
+                    server + "/Items/" + id + "/Images/" + (episode ? "Primary" : "Backdrop") + "?maxHeight=240"));
+            }
         } catch (Exception e) {
-            return null;
+            // Unreadable: nothing to show.
         }
+        return out;
     }
 
     static Start start(String json) {
@@ -109,6 +121,25 @@ final class Jellyfin {
             return new Login(o.getString("AccessToken"), o.getJSONObject("User").getString("Id"));
         } catch (Exception e) {
             throw new IOException("Jellyfin sent an unreadable sign-in reply");
+        }
+    }
+
+    private static byte[] sendBytes(String target, String token, String deviceId) throws IOException {
+        HttpURLConnection h = (HttpURLConnection) new URL(target).openConnection();
+        try {
+            h.setConnectTimeout(3000);
+            h.setReadTimeout(8000);
+            h.setRequestProperty("Authorization", "MediaBrowser Client=\"rxhome\", Device=\"Phone\", DeviceId=\""
+                + deviceId + "\", Version=\"1.0\"" + (token == null ? "" : ", Token=\"" + token + "\""));
+            if (h.getResponseCode() / 100 != 2) throw new IOException("No picture (HTTP " + h.getResponseCode() + ")");
+            try (InputStream in = h.getInputStream()) {
+                ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                byte[] b = new byte[16384];
+                for (int n; (n = in.read(b)) > 0; ) buf.write(b, 0, n);
+                return buf.toByteArray();
+            }
+        } finally {
+            h.disconnect();
         }
     }
 

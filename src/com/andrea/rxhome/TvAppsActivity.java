@@ -1,33 +1,42 @@
 package com.andrea.rxhome;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The TV's apps, one per row: tap the app to open it on the TV, or a shortcut on its right to go
- * straight somewhere (RxFilms: Continue watching / Next up; Spotify: Liked Songs / DJ X; YouTube: Claude FM).
+ * The TV's apps, one per row: tap the app to open it on the TV, or a card on its right to go straight
+ * somewhere. RxFilms: every Continue watching / Next up item (lists hidden when empty); Spotify: Liked
+ * Songs / DJ X; YouTube: Claude FM. Cards carry thumbnails.
  */
 public class TvAppsActivity extends Activity {
 
     private static final String DJ_X = "spotify:playlist:37i9dQZF1EYkqdzj48dyYq", LIKED = "spotify:collection:tracks";
 
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService pictures = Executors.newFixedThreadPool(4);
     private Config cfg;
     private FireTv tv;
-    private TextView resumeSub, nextSub;
 
     private interface TvAction {
-        String run() throws IOException; // returns what to tell the user, e.g. "Opening Dune on the TV"
+        String run() throws IOException; // what to tell the user, e.g. "Opening Dune on the TV"
     }
 
     @Override
@@ -47,37 +56,47 @@ public class TvAppsActivity extends Activity {
         col.addView(sub);
 
         LinearLayout films = row(col, R.drawable.ic_app_rxfilms, "RxFilms", "org.rxfilms.tv");
-        resumeSub = shortcut(films, "Continue watching", () -> openJellyfin(true));
-        nextSub = shortcut(films, "Next up", () -> openJellyfin(false));
+        loadFilms(films);
 
         LinearLayout spotify = row(col, R.drawable.ic_app_spotify, "Spotify", FireTv.SPOTIFY);
-        shortcut(spotify, "Liked Songs", () -> { tv.view(LIKED, FireTv.SPOTIFY); return "Playing your Liked Songs on the TV"; });
-        shortcut(spotify, "DJ X", () -> { tv.view(DJ_X, FireTv.SPOTIFY); return "Starting DJ X on the TV"; });
+        ImageView liked = card(spotify, "Liked Songs", "", "♥", () -> {
+            tv.view(LIKED, FireTv.SPOTIFY);
+            return "Playing your Liked Songs on the TV";
+        });
+        liked.setImageDrawable(gradient(0xFF4A1DD6, 0xFF8FD3C3));
+        ImageView dj = card(spotify, "DJ X", "", "DJ X", () -> {
+            tv.view(DJ_X, FireTv.SPOTIFY);
+            return "Starting DJ X on the TV";
+        });
+        dj.setImageDrawable(gradient(0xFF101418, Ui.RED));
 
         LinearLayout youtube = row(col, R.drawable.ic_app_youtube, "YouTube", FireTv.SMARTTUBE);
-        shortcut(youtube, "Claude FM", () -> { tv.play(FireTv.claudeFmId()); return "Playing Claude FM on the TV"; });
+        ImageView claude = card(youtube, "Claude FM", "Live", null, () -> {
+            tv.play(FireTv.claudeFmId());
+            return "Playing Claude FM on the TV";
+        });
+        pictures.execute(() -> show(claude, fetch("https://i.ytimg.com/vi/" + FireTv.claudeFmId() + "/hqdefault_live.jpg")));
 
         ScrollView s = new ScrollView(this);
         s.addView(col);
         setContentView(s);
-        loadJellyfinLabels();
     }
 
     @Override
     protected void onDestroy() {
         io.shutdownNow();
+        pictures.shutdownNow();
         super.onDestroy();
     }
 
-    /** One app: logo and name on the left (opens it), its shortcuts stacked on the right. */
+    /** One app: logo and name on the left (opens it), its cards stacked on the right. */
     private LinearLayout row(LinearLayout col, int logo, String name, String pkg) {
         LinearLayout tile = Ui.tile(this);
         tile.setOrientation(LinearLayout.HORIZONTAL);
-        tile.setGravity(Gravity.CENTER_VERTICAL);
 
         LinearLayout app = new LinearLayout(this);
         app.setOrientation(LinearLayout.VERTICAL);
-        app.setGravity(Gravity.CENTER);
+        app.setGravity(Gravity.CENTER_HORIZONTAL);
         app.setPadding(0, Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8));
         ImageView icon = new ImageView(this);
         icon.setImageResource(logo);
@@ -95,35 +114,106 @@ public class TvAppsActivity extends Activity {
         });
         tile.addView(app, new LinearLayout.LayoutParams(0, -2, 1));
 
-        LinearLayout shortcuts = new LinearLayout(this);
-        shortcuts.setOrientation(LinearLayout.VERTICAL);
-        tile.addView(shortcuts, new LinearLayout.LayoutParams(0, -2, 1.5f));
+        LinearLayout cards = new LinearLayout(this);
+        cards.setOrientation(LinearLayout.VERTICAL);
+        tile.addView(cards, new LinearLayout.LayoutParams(0, -2, 1.7f));
         col.addView(tile);
-        return shortcuts;
+        return cards;
     }
 
-    /** A shortcut button; returns its second line (for what it will open), empty at first. */
-    private TextView shortcut(LinearLayout shortcuts, String title, TvAction action) {
-        LinearLayout b = new LinearLayout(this);
-        b.setOrientation(LinearLayout.VERTICAL);
-        b.setBackground(Ui.button(this, "", false).getBackground());
-        int p = Ui.dp(this, 12);
-        b.setPadding(p, p, p, p);
-        b.addView(Ui.text(this, title, 15, Ui.TEXT, true));
-        TextView sub = Ui.text(this, "", 12, Ui.DIM, false);
-        sub.setVisibility(View.GONE);
-        b.addView(sub);
-        b.setClickable(true);
-        b.setFocusable(true);
-        b.setContentDescription(title);
-        b.setOnClickListener(v -> {
+    /** A shortcut card: thumbnail (optionally with a big label on it), title, second line. Returns the thumbnail. */
+    private ImageView card(LinearLayout cards, String title, String sub, String overlay, TvAction action) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setBackground(Ui.button(this, "", false).getBackground());
+
+        FrameLayout thumbBox = new FrameLayout(this);
+        ImageView thumb = new ImageView(this);
+        thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        thumb.setBackgroundColor(Ui.TILE);
+        thumbBox.addView(thumb, new FrameLayout.LayoutParams(-1, -1));
+        if (overlay != null) {
+            TextView big = Ui.text(this, overlay, 26, 0xFFFFFFFF, true);
+            big.setGravity(Gravity.CENTER);
+            thumbBox.addView(big, new FrameLayout.LayoutParams(-1, -1));
+        }
+        c.addView(thumbBox, new LinearLayout.LayoutParams(-1, Ui.dp(this, 104)));
+
+        LinearLayout text = new LinearLayout(this);
+        text.setOrientation(LinearLayout.VERTICAL);
+        int p = Ui.dp(this, 10);
+        text.setPadding(p, p, p, p);
+        TextView t = Ui.text(this, title, 14, Ui.TEXT, true);
+        t.setMaxLines(2);
+        text.addView(t);
+        if (!sub.isEmpty()) text.addView(Ui.text(this, sub, 12, Ui.DIM, false));
+        c.addView(text);
+
+        c.setClickable(true);
+        c.setFocusable(true);
+        c.setContentDescription(title + (sub.isEmpty() ? "" : ", " + sub));
+        c.setOnClickListener(v -> {
             Ui.haptic(v);
             run(action);
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.bottomMargin = Ui.dp(this, 8);
-        shortcuts.addView(b, lp);
-        return sub;
+        lp.bottomMargin = Ui.dp(this, 10);
+        cards.addView(c, lp);
+        return thumb;
+    }
+
+    /** RxFilms: a card per Continue watching and Next up item; empty lists aren't shown. */
+    private void loadFilms(LinearLayout cards) {
+        Jellyfin jf = cfg.jellyfin();
+        TextView note = Ui.text(this, jf == null ? "Sign in to Jellyfin in Settings for Continue watching and Next up" : "Loading…",
+            13, Ui.DIM, false);
+        cards.addView(note);
+        if (jf == null) return;
+        io.execute(() -> {
+            List<Jellyfin.Item> resume, next;
+            String error = null;
+            try {
+                resume = jf.resumeAll();
+                next = jf.nextUpAll();
+            } catch (IOException e) {
+                resume = next = java.util.Collections.emptyList();
+                error = e.getMessage();
+            }
+            List<Jellyfin.Item> r = resume, n = next;
+            String err = error;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                if (err != null) {
+                    note.setText(err);
+                    return;
+                }
+                cards.removeView(note);
+                section(cards, "Continue watching", r, jf);
+                section(cards, "Next up", n, jf);
+                if (r.isEmpty() && n.isEmpty()) cards.addView(Ui.text(this, "Nothing to watch right now", 13, Ui.DIM, false));
+            });
+        });
+    }
+
+    private void section(LinearLayout cards, String name, List<Jellyfin.Item> items, Jellyfin jf) {
+        if (items.isEmpty()) return;
+        TextView h = Ui.text(this, name.toUpperCase(), 12, Ui.RED, true);
+        h.setLetterSpacing(0.08f);
+        h.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 6));
+        cards.addView(h);
+        for (Jellyfin.Item it : items) {
+            ImageView thumb = card(cards, it.title, it.episode, null, () -> {
+                tv.openItem(FireTv.RXFILMS, it.id);
+                return "Opening " + it.label() + " on the TV";
+            });
+            pictures.execute(() -> {
+                try {
+                    show(thumb, jf.image(it.image));
+                } catch (IOException e) {
+                    // No picture: the card keeps its plain background.
+                }
+            });
+        }
     }
 
     /** Runs on the TV: switches it on first if it's off, then says what happened. */
@@ -148,40 +238,37 @@ public class TvAppsActivity extends Activity {
         });
     }
 
-    private String openJellyfin(boolean resume) throws IOException {
-        Jellyfin jf = cfg.jellyfin();
-        if (jf == null) return "Sign in to Jellyfin in Settings first";
-        Jellyfin.Item it = resume ? jf.resume() : jf.nextUp();
-        if (it == null) return resume ? "Nothing to continue" : "Nothing up next";
-        tv.openItem(FireTv.RXFILMS, it.id);
-        return "Opening " + it.label() + " on the TV";
+    private GradientDrawable gradient(int from, int to) {
+        return new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[] {from, to});
     }
 
-    /** Shows under the RxFilms shortcuts what they would open. */
-    private void loadJellyfinLabels() {
-        Jellyfin jf = cfg.jellyfin();
-        if (jf == null) {
-            resumeSub.setText("Sign in to Jellyfin in Settings");
-            resumeSub.setVisibility(View.VISIBLE);
-            return;
-        }
-        io.execute(() -> {
-            String r, n;
-            try {
-                Jellyfin.Item a = jf.resume(), b = jf.nextUp();
-                r = a == null ? "Nothing to continue" : a.label();
-                n = b == null ? "Nothing up next" : b.label();
-            } catch (IOException e) {
-                r = n = e.getMessage();
-            }
-            String rr = r, nn = n;
-            runOnUiThread(() -> {
-                if (isDestroyed()) return;
-                resumeSub.setText(rr);
-                resumeSub.setVisibility(View.VISIBLE);
-                nextSub.setText(nn);
-                nextSub.setVisibility(View.VISIBLE);
-            });
+    /** Background thread: decodes and shows a picture (null bytes = nothing to show). */
+    private void show(ImageView v, byte[] bytes) {
+        if (bytes == null) return;
+        Bitmap b = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        if (b != null) runOnUiThread(() -> {
+            if (!isDestroyed()) v.setImageBitmap(b);
         });
+    }
+
+    /** A public picture (e.g. YouTube's), or null. */
+    private static byte[] fetch(String url) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(3000);
+            c.setReadTimeout(6000);
+            if (c.getResponseCode() != 200) return null;
+            try (InputStream in = c.getInputStream()) {
+                java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+                byte[] b = new byte[16384];
+                for (int n; (n = in.read(b)) > 0; ) buf.write(b, 0, n);
+                return buf.toByteArray();
+            }
+        } catch (IOException e) {
+            return null;
+        } finally {
+            if (c != null) c.disconnect();
+        }
     }
 }
