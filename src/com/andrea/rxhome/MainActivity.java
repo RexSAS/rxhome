@@ -153,15 +153,26 @@ public class MainActivity extends Activity {
         return tile;
     }
 
+    private State shownServer = State.UNREACHABLE;
+    private boolean statsSeen; // fresh stats this refresh (not the remembered ones): with Jellyfin silent = starting
+
     private void showServer(State s, boolean fresh) {
         if (fresh) cfg.prefs.edit().putString("last_server", s.name()).apply();
+        shownServer = s;
+        paintServer();
+    }
+
+    private void paintServer() {
+        if (openJellyfin == null) return; // the card is still being built (remembered stats come first)
+        State s = shownServer;
         if (s == State.ON) vpnNote = null;
         openJellyfin.setVisibility(s == State.ON && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
             ? View.VISIBLE : View.GONE);
-        serverStatus.setText(s == State.ON ? "● ONLINE"
+        String label = Server.label(s, statsSeen);
+        serverStatus.setText(label.equals("online") ? "● ONLINE" : label.equals("starting") ? "◐ STARTING…"
             : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
-        serverStatus.setTextColor(s == State.ON ? Ui.RED : Ui.DIM);
-        Ui.reachable(serverStatus, s == State.ON);
+        serverStatus.setTextColor(label.equals("online") ? Ui.RED : label.equals("starting") ? Ui.TEXT : Ui.DIM);
+        Ui.reachable(serverStatus, !label.equals("unknown"));
     }
 
     /** CPU · temp · RAM · uptime line; hidden when node_exporter can't be reached. */
@@ -169,6 +180,8 @@ public class MainActivity extends Activity {
         if (fresh && stats != null) cfg.prefs.edit().putString("last_stats", stats).apply();
         serverStats.setText(stats == null ? "" : stats);
         serverStats.setVisibility(stats == null ? View.GONE : View.VISIBLE);
+        statsSeen = fresh && stats != null;
+        paintServer();
     }
 
     // shortcut: node_exporter assumed on the Jellyfin LAN host at :9100; make it a setting if it ever moves.
@@ -556,7 +569,8 @@ public class MainActivity extends Activity {
         b.setText("Running…");
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
-            () -> Server.status(server, pub), cfg.jellyfin(), this::askWhat);
+            () -> Server.effective(Server.status(server, pub), Metrics.fetch(metricsUrl(server)) != null),
+            cfg.jellyfin(), this::askWhat);
         io.execute(() -> {
             int[] r = runner.run(scene);
             ui(() -> {

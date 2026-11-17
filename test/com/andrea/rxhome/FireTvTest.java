@@ -109,6 +109,14 @@ public class FireTvTest {
         assert FireTv.parseAwake("  mWakefulness=Asleep\n") == State.OFF;
         assert FireTv.parseAwake("  mWakefulness=Dozing\n") == State.OFF;
 
+        // Stats answer but Jellyfin doesn't yet: the server is booting.
+        assert Server.label(State.ON, true).equals("online") && Server.label(State.ON, false).equals("online");
+        assert Server.label(State.UNREACHABLE, true).equals("starting");
+        assert Server.label(State.UNREACHABLE, false).equals("unknown");
+        // For "server must be on": starting counts as on (pressing now would switch it off mid-boot).
+        assert Server.effective(State.UNREACHABLE, true) == State.ON;
+        assert Server.effective(State.UNREACHABLE, false) == State.UNREACHABLE;
+
         // LAN address first, then the public one (rxfilms.rxsas.it): any answer means online.
         assert Server.status("http://127.0.0.1:9", "http://127.0.0.1:9") == State.UNREACHABLE;
         String server = System.getenv("RXHOME_SERVER");

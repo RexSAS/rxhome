@@ -11,6 +11,19 @@ final class Server {
     private Server() {}
 
     /**
+     * What the card says: Jellyfin answering = "online"; only the stats (node_exporter starts early in
+     * boot, Jellyfin later) = "starting"; neither = "unknown" (off, or out of reach).
+     */
+    static String label(State jellyfin, boolean statsSeen) {
+        return jellyfin == State.ON ? "online" : statsSeen ? "starting" : "unknown";
+    }
+
+    /** For "server must be on": a starting server counts as on, so its power button isn't pressed mid-boot. */
+    static State effective(State jellyfin, boolean statsSeen) {
+        return jellyfin == State.ON || statsSeen ? State.ON : jellyfin;
+    }
+
+    /**
      * ON if Jellyfin answers at any of the addresses (LAN first, then public); otherwise UNREACHABLE
      * (off and out of reach look the same, so never OFF).
      */
