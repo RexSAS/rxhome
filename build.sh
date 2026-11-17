@@ -10,12 +10,14 @@ JAR=$SDK/platforms/android-34/android.jar
 export JAVA_HOME=$HOME/.local/opt/jdk17
 export PATH=$JAVA_HOME/bin:$PATH
 
+./keys.sh
+mkdir -p assets && cp build/rxhome-keys.dex assets/
 rm -rf build/apk
 mkdir -p build/apk/gen build/apk/classes build/apk/dex
 
 "$BT/aapt2" compile --dir res -o build/apk/res.zip
 "$BT/aapt2" link -I "$JAR" --manifest AndroidManifest.xml --java build/apk/gen \
-    --min-sdk-version 26 --target-sdk-version 30 -o build/apk/unsigned.apk build/apk/res.zip
+    --min-sdk-version 26 --target-sdk-version 30 -A assets -o build/apk/unsigned.apk build/apk/res.zip
 
 javac --release 8 -classpath "$JAR" -Xlint:-options -d build/apk/classes \
     $(find src build/apk/gen -name '*.java')

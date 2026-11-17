@@ -7,6 +7,7 @@ export JAVA_HOME=$HOME/.local/opt/jdk17
 export PATH=$JAVA_HOME/bin:$PATH
 JSON=$(ls "$HOME"/.gradle/caches/modules-2/files-2.1/org.json/json/20240303/*/json-20240303.jar | head -1)
 
+./keys.sh
 rm -rf build/test && mkdir -p build/test
 SRC=$(grep -L 'import android\.' $(find src -name '*.java'))
 TESTS=$(find test -name '*Test.java')

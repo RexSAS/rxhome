@@ -18,10 +18,30 @@ class FireTv {
     static final int SLEEP = 223, WAKEUP = 224;
     static final String CLAUDE_FM_FALLBACK = "tRsQsTMvPNg";
 
+    private static final String HELPER_MAIN = "com.andrea.rxhome.tv.Keys";
+    private static final long HELPER_RETRY_MS = 30000;
+
     private final Adb adb;
+    // Fast keys: a helper (tv/.../Keys.java) kept running on the stick over its own connection.
+    private final Adb keysAdb;
+    private final byte[] helperDex;
+    private Adb.Stream keys;
+    private long helperFailedAt;
 
     FireTv(Adb adb) {
+        this(adb, null, null);
+    }
+
+    FireTv(Adb adb, Adb keysAdb, byte[] helperDex) {
         this.adb = adb;
+        this.keysAdb = keysAdb;
+        this.helperDex = helperDex;
+    }
+
+    void close() {
+        keys = null;
+        if (keysAdb != null) keysAdb.close();
+        adb.close();
     }
 
     /** Runs when the TV starts showing "Allow USB debugging?" for this phone. */
@@ -42,8 +62,50 @@ class FireTv {
         return parseAwake(adb.shell("dumpsys power | grep mWakefulness=", 1500));
     }
 
-    void key(int code) throws IOException {
+    /** One d-pad key: through the helper when it runs (one round trip), else `input` (~1 s on Fire OS). */
+    synchronized void key(int code) throws IOException {
+        if (helperDex != null && keysAdb != null) {
+            try {
+                if (keys == null && System.currentTimeMillis() - helperFailedAt > HELPER_RETRY_MS) startHelper();
+                if (keys != null) {
+                    keys.writeLine(Integer.toString(code), 2000);
+                    if ("ok".equals(keys.readLine(2000))) return;
+                }
+            } catch (IOException | RuntimeException e) {
+                keys = null;
+                helperFailedAt = System.currentTimeMillis();
+                keysAdb.close();
+            }
+        }
         adb.shell("input dpad keyevent " + code, 3000);
+    }
+
+    /** Pushes the helper once (named by content, so a new build replaces it) and starts it. */
+    private void startHelper() throws IOException {
+        String path = "/data/local/tmp/rxhome-keys-" + shortHash(helperDex) + ".dex";
+        if (!adb.shell("[ -f " + path + " ] && echo y", 3000).trim().equals("y")) {
+            String b64 = java.util.Base64.getEncoder().encodeToString(helperDex);
+            adb.shell("rm -f /data/local/tmp/rxhome-keys-*", 3000);
+            // ADB messages carry at most 4 KB, so the file goes over in chunks.
+            for (int i = 0; i < b64.length(); i += 3000) {
+                adb.shell("echo -n '" + b64.substring(i, Math.min(b64.length(), i + 3000)) + "' >> " + path + ".b64", 3000);
+            }
+            adb.shell("base64 -d " + path + ".b64 > " + path + " && rm " + path + ".b64", 3000);
+        }
+        Adb.Stream s = keysAdb.open("exec:CLASSPATH=" + path + " app_process / " + HELPER_MAIN, 5000);
+        if (!"ready".equals(s.readLine(5000))) throw new IOException("Key helper didn't start");
+        keys = s;
+    }
+
+    private static String shortHash(byte[] b) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(b);
+            StringBuilder s = new StringBuilder();
+            for (int i = 0; i < 6; i++) s.append(String.format("%02x", d[i]));
+            return s.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     // The Philips follows only through its own settings (EasyLink, "switch off with no signal"):

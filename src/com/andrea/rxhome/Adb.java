@@ -64,6 +64,68 @@ class Adb {
         }
     }
 
+    /**
+     * A long-lived two-way stream, e.g. "exec:<command>" (raw: no terminal echo). Use one stream per
+     * Adb instance and from one thread: its messages share the socket with shell().
+     */
+    final class Stream {
+        private final int local;
+        private int remote;
+        private final StringBuilder pending = new StringBuilder();
+
+        private Stream(int local) {
+            this.local = local;
+        }
+
+        void writeLine(String line, int timeoutMs) throws IOException {
+            socket.setSoTimeout(timeoutMs);
+            send(WRTE, local, remote, (line + "\n").getBytes(StandardCharsets.UTF_8));
+            while (true) {
+                Msg m = read();
+                if (m.arg1 != local) continue;
+                if (m.cmd == OKAY) return;
+                take(m);
+            }
+        }
+
+        String readLine(int timeoutMs) throws IOException {
+            socket.setSoTimeout(timeoutMs);
+            while (pending.indexOf("\n") < 0) {
+                Msg m = read();
+                if (m.arg1 == local) take(m);
+            }
+            int nl = pending.indexOf("\n");
+            String line = pending.substring(0, nl).trim();
+            pending.delete(0, nl + 1);
+            return line;
+        }
+
+        private void take(Msg m) throws IOException {
+            if (m.cmd == WRTE) {
+                pending.append(new String(m.data, StandardCharsets.UTF_8));
+                send(OKAY, local, remote, new byte[0]);
+            } else if (m.cmd == CLSE) {
+                throw new IOException("Stream closed by the TV");
+            }
+        }
+    }
+
+    synchronized Stream open(String service, int timeoutMs) throws IOException {
+        if (socket == null) connect(timeoutMs);
+        socket.setSoTimeout(timeoutMs);
+        Stream st = new Stream(nextId++);
+        send(OPEN, st.local, 0, (service + "\0").getBytes(StandardCharsets.UTF_8));
+        while (true) {
+            Msg m = read();
+            if (m.arg1 != st.local) continue;
+            if (m.cmd == OKAY) {
+                st.remote = m.arg0;
+                return st;
+            }
+            if (m.cmd == CLSE) throw new IOException("TV refused " + service);
+        }
+    }
+
     synchronized void close() {
         try {
             if (socket != null) socket.close();

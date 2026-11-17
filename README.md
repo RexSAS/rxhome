@@ -20,6 +20,8 @@ adb install -r build/rxhome.apk              # phone with USB debugging, or copy
 RXHOME_ADB=192.168.1.49 RXHOME_SERVER=http://192.168.1.166:8096 ./test.sh   # plus live device checks
 ```
 
+Remote keys go through a tiny helper (`tv/…/Keys.java`, built by `keys.sh` and packed into the APK). The app copies it to the FireStick's `/data/local/tmp` and keeps it running, so a key takes ~10 ms instead of the ~1 s that Fire OS's `input` command needs. If the helper can't start, keys fall back to `input`.
+
 `build.sh` creates `signing.keystore` on first run; keep it (git-ignored): updates must be signed with the same key.
 
 ## First run

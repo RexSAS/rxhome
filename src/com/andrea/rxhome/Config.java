@@ -22,9 +22,10 @@ final class Config {
         DEFAULTS.put(SCENES, Scenes.DEFAULT);
     }
 
-    // One ADB connection per process, shared by the home and remote screens.
-    private static Adb adb;
-    private static String adbHost;
+    // One FireTv per process, shared by the home and remote screens, so its ADB connections and the
+    // running key helper survive moving between screens.
+    private static FireTv tv;
+    private static String tvHost;
 
     final SharedPreferences prefs;
     private final Context ctx;
@@ -45,12 +46,27 @@ final class Config {
 
     synchronized FireTv tv() {
         String host = get(FIRETV);
-        if (adb == null || !host.equals(adbHost)) {
-            if (adb != null) adb.close();
-            adb = new Adb(host, 5555, adbKey());
-            adbHost = host;
+        if (tv == null || !host.equals(tvHost)) {
+            if (tv != null) tv.close();
+            KeyPair key = adbKey();
+            Adb keysAdb = new Adb(host, 5555, key);
+            keysAdb.authWaitMs = 1500; // only the main connection holds the line for the TV's prompt
+            tv = new FireTv(new Adb(host, 5555, key), keysAdb, helperDex());
+            tvHost = host;
         }
-        return new FireTv(adb);
+        return tv;
+    }
+
+    /** The key helper built by keys.sh and packed into assets by build.sh; null if missing. */
+    private byte[] helperDex() {
+        try (java.io.InputStream in = ctx.getAssets().open("rxhome-keys.dex")) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] b = new byte[8192];
+            for (int n; (n = in.read(b)) > 0; ) out.write(b, 0, n);
+            return out.toByteArray();
+        } catch (java.io.IOException e) {
+            return null;
+        }
     }
 
     /** Null until a token and secret are set. */
