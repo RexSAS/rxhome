@@ -15,6 +15,7 @@ class SceneRunner {
     private final java.util.function.Supplier<State> server;
     private final Jellyfin jf;
     private final Ask ask;
+    private final Runnable openRemote;
 
     /** For "choose when run": shows the choices for an app and returns one (Scenes.contents value or "item:<id>"); null = cancelled. */
     interface Ask {
@@ -22,7 +23,7 @@ class SceneRunner {
     }
 
     SceneRunner(Map<String, Tapo> lights, FireTv tv, SwitchBot sb, String botId,
-            java.util.function.Supplier<State> server, Jellyfin jf, Ask ask) {
+            java.util.function.Supplier<State> server, Jellyfin jf, Ask ask, Runnable openRemote) {
         this.lights = lights;
         this.tv = tv;
         this.sb = sb;
@@ -30,6 +31,7 @@ class SceneRunner {
         this.server = server;
         this.jf = jf;
         this.ask = ask;
+        this.openRemote = openRemote;
     }
 
     /** Returns {steps done, steps total}. */
@@ -86,6 +88,10 @@ class SceneRunner {
                 return true;
             case "wait":
                 pause(Integer.parseInt(s[1]));
+                return true;
+            case "phone":
+                if (openRemote == null) return false;
+                openRemote.run();
                 return true;
             default:
                 return false;

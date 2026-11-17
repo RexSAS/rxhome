@@ -138,6 +138,8 @@ final class Scenes {
                 return s[1].equals("press") ? "Press the server's power button" : "Server must be " + s[1];
             case "wait":
                 return "Wait " + s[1] + " s";
+            case "phone":
+                return "Open the remote on the phone";
             default:
                 return String.join(" ", s);
         }
@@ -207,6 +209,9 @@ final class Scenes {
                 break;
             case "wait":
                 ok = s.length == 2 && s[1].matches("\\d{1,3}");
+                break;
+            case "phone":
+                ok = s.length == 2 && s[1].equals("remote");
                 break;
             default:
                 ok = false;

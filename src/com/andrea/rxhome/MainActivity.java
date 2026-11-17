@@ -570,7 +570,7 @@ public class MainActivity extends Activity {
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
             () -> Server.effective(Server.status(server, pub), Metrics.fetch(metricsUrl(server)) != null),
-            cfg.jellyfin(), this::askWhat);
+            cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))));
         io.execute(() -> {
             int[] r = runner.run(scene);
             ui(() -> {

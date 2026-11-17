@@ -74,6 +74,11 @@ public class ScenesTest {
         // The default Music scene plays Claude FM through YouTube now.
         assert Scenes.DEFAULT.contains("Music: light all on 60 warm; tv on; wait 5; tv app org.smarttube.stable claudefm");
 
+        // Open the remote on the phone.
+        assert Scenes.parse("A: tv on; phone remote").get(0).steps.size() == 2;
+        failsOnLine("A: phone dance", 1);
+        assert Scenes.describe(new String[] {"phone", "remote"}).equals("Open the remote on the phone");
+
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");
         assert l.size() == 2;

@@ -334,8 +334,10 @@ public class SceneEditorActivity extends Activity {
     }
 
     private void addStep() {
-        String[] names = {"Lights", "TV on / off", "Open an app on the TV", "Server must be on / off", "Wait"};
-        String[][] start = {{"light", "all", "on"}, {"tv", "on"}, {"tv", "app", "org.rxfilms.tv"}, {"server", "on"}, {"wait", "5"}};
+        String[] names = {"Lights", "TV on / off", "Open an app on the TV", "Server must be on / off", "Wait",
+            "Open the remote on the phone"};
+        String[][] start = {{"light", "all", "on"}, {"tv", "on"}, {"tv", "app", "org.rxfilms.tv"}, {"server", "on"}, {"wait", "5"},
+            {"phone", "remote"}};
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Add a step")
             .setItems(names, (d, w) -> {

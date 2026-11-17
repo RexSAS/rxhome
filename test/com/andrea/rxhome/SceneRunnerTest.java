@@ -64,7 +64,7 @@ public class SceneRunnerTest {
         SceneRunner r = new SceneRunner(lights, new FakeTv(), new FakeBot(), "bot1", () -> server, null, pkg -> {
             log.add("ask " + pkg);
             return answer;
-        }) {
+        }, () -> log.add("phone remote")) {
             @Override void pause(int seconds) { log.add("wait " + seconds); }
         };
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
@@ -114,6 +114,9 @@ public class SceneRunnerTest {
         assert Arrays.equals(run(r, "X: tv app org.rxfilms.tv ask; tv off"), new int[] {1, 2}) : log;
         // RxFilms' Continue watching needs Jellyfin: not signed in = not done.
         assert Arrays.equals(run(r, "X: tv app org.rxfilms.tv resume"), new int[] {0, 1}) : log;
+
+        // The remote on the phone opens, the scene goes on.
+        assert Arrays.equals(run(r, "X: phone remote; tv off"), new int[] {2, 2}) && log.equals(Arrays.asList("phone remote", "tv sleep")) : log;
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));
