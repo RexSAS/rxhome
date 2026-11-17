@@ -105,8 +105,6 @@ public class PhilipsTest {
         String ip = System.getenv("RXHOME_PHILIPS");
         if (ip != null) {
             assert Philips.needsPairing(ip) : "expected digest_auth_pairing";
-            // This TV (JointSPACE 6.1, Linux) has no /6/powerstate (404): "on" = its API answers.
-            assert new Philips(ip, "unpaired", "x", "x").isOn() : "TV is on but not seen as on";
         }
     }
 }

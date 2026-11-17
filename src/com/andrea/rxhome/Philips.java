@@ -61,22 +61,12 @@ class Philips {
         request("POST", "/6/input/key", "{\"key\":\"" + key + "\"}", ip, user, pass, certPin, null);
     }
 
-    /**
-     * True when the TV is on. This TV (JointSPACE 6.1, Linux) has no /6/powerstate (404) and drops off
-     * Wi-Fi in standby, so "on" = its API answers (plain HTTP 1925, no login). Off the network: IOException.
-     */
-    boolean isOn() throws IOException {
-        String host = ip.contains(":") ? ip.substring(0, ip.indexOf(':')) : ip;
-        HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + ":1925/6/system").openConnection();
-        c.setConnectTimeout(1500);
-        c.setReadTimeout(2000);
-        try {
-            int code = c.getResponseCode();
-            drain(c, code);
-            return code == 200;
-        } finally {
-            c.disconnect();
-        }
+    // No power-state reader: this TV (JointSPACE 6.1, Linux) has no /6/powerstate (404), and every other
+    // endpoint answers the same on and in standby. The TV's power is read from HDMI-CEC (FireTv).
+
+    /** GET /6/<path> with the login, e.g. "context": the raw reply. */
+    String get(String path) throws IOException {
+        return request("GET", "/6/" + path, null, ip, user, pass, certPin, null);
     }
 
     /** The TV's MAC on the interface we talk to, for Wake-on-LAN; null if unknown. */

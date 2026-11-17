@@ -150,34 +150,62 @@ class FireTv {
         key(SLEEP);
     }
 
-    /** TV on (Wake-on-LAN: the TV needs "Switch on with Wi-Fi"), then the stick. */
+    /**
+     * TV on: the PowerOn key through its API (it keeps the network up in standby), Wake-on-LAN for deep
+     * standby (needs "Switch on with Wi-Fi"), then the stick.
+     */
     void wake() throws IOException {
+        Philips p = philips;
+        if (p != null) {
+            try {
+                p.key("PowerOn");
+            } catch (IOException e) {
+                log("power on", e);
+            }
+        }
         if (philipsMac != null) {
             try {
                 Philips.wake(philipsMac);
             } catch (IOException | IllegalArgumentException e) {
-                // No broadcast here (away from home): the API call below may still work.
+                // No broadcast here (away from home).
             }
         }
         key(WAKEUP);
     }
 
     /**
-     * The TV's own power state when paired (stick = the FireStick's state, already known by the caller):
-     * a TV that doesn't answer while the stick does is in standby; neither answering = away, unknown.
-     * Not paired: the stick's state stands in.
+     * The TV's power (stick = the FireStick's state, already known by the caller), from what the TV
+     * announced over HDMI-CEC: its network API answers the same on and in standby. No CEC news yet: the
+     * stick's state stands in. Stick unreachable: away from home, unknown.
      */
     State tvState(State stick) {
-        Philips p = philips;
-        if (p == null) return stick;
+        if (stick == State.UNREACHABLE) return State.UNREACHABLE;
         try {
-            boolean on = p.isOn();
-            System.err.println("rxhome-tv: power state " + (on ? "on" : "standby"));
-            return on ? State.ON : State.OFF;
+            Boolean on = parseTvPower(cecLog());
+            if (on != null) return on ? State.ON : State.OFF;
         } catch (IOException e) {
             log("power state", e);
-            return stick == State.UNREACHABLE ? State.UNREACHABLE : State.OFF;
         }
+        return stick;
+    }
+
+    /** The stick's HDMI-CEC log lines that carry the TV's power. */
+    String cecLog() throws IOException {
+        return adb.shell("dumpsys hdmi_control | grep -E 'Standby>|Report Power Status>'", 3000);
+    }
+
+    private static final java.util.regex.Pattern TV_POWER = java.util.regex.Pattern.compile(
+        "\\[R\\][^\\n]*<(?:Standby> 0[0-9A-Fa-f]:36|Report Power Status> 0[0-9A-Fa-f]:90:0([0-3]))");
+
+    /**
+     * The TV's last word on its power, from messages it sent (logical address 0): &lt;Standby&gt; = off,
+     * &lt;Report Power Status&gt; 00 on / 02 turning on / 01, 03 standby. Null if it said nothing.
+     */
+    static Boolean parseTvPower(String dump) {
+        java.util.regex.Matcher m = TV_POWER.matcher(dump);
+        Boolean on = null;
+        while (m.find()) on = m.group(1) != null && (m.group(1).equals("0") || m.group(1).equals("2"));
+        return on;
     }
 
     /** TV errors that don't stop the action go to the system log (Android: tag System.err). No secrets. */
