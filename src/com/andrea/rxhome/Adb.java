@@ -49,13 +49,13 @@ class Adb {
 
     /** Runs a shell command and returns its output. Reconnects once if the connection went stale. */
     synchronized String shell(String cmd, int timeoutMs) throws IOException {
+        boolean reused = socket != null;
         try {
             return run(cmd, timeoutMs);
-        } catch (AdbAuthException e) {
-            close();
-            throw e;
         } catch (IOException e) {
             close();
+            // Only a reused connection can be stale; a fresh connect that failed won't do better twice.
+            if (!reused || e instanceof AdbAuthException) throw e;
             return run(cmd, timeoutMs);
         }
     }
