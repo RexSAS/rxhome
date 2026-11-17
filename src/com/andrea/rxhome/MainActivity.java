@@ -42,6 +42,9 @@ public class MainActivity extends Activity {
     private TextView serverStatus, serverStats, tvStatus;
     private LinearLayout tvTile;
     private final Confirm serverConfirm = new Confirm();
+    // This refresh's server and FireStick results: both unreachable = away → WireGuard (see Vpn).
+    private State genServer, genStick;
+    private long vpnTriedAt;
     private final Map<String, LightRow> rows = new LinkedHashMap<>();
 
     @Override
@@ -49,6 +52,9 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         Ui.window(this);
         cfg = new Config(this);
+        if (checkSelfPermission(Vpn.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {Vpn.PERMISSION}, 1); // lets rxhome switch on the WireGuard tunnel
+        }
     }
 
     @Override
@@ -442,10 +448,16 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         int gen = ++generation;
+        genServer = genStick = null;
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         io.execute(() -> {
             State s = Server.status(server, pub);
-            ui(() -> { if (gen == generation) showServer(s, true); });
+            ui(() -> {
+                if (gen != generation) return;
+                showServer(s, true);
+                genServer = s;
+                maybeVpn();
+            });
         });
         io.execute(() -> {
             String stats = Metrics.fetch(metricsUrl(server));
@@ -459,18 +471,45 @@ public class MainActivity extends Activity {
         }));
         io.execute(() -> {
             try {
-                State s = tv.tvState(tv.checkedState());
-                ui(() -> { if (gen == generation) showTv(s, true); });
+                State stick = tv.checkedState();
+                State s = tv.tvState(stick);
+                ui(() -> {
+                    if (gen != generation) return;
+                    showTv(s, true);
+                    genStick = stick;
+                    maybeVpn();
+                });
             } catch (IOException e) {
+                // A key prompt means the stick answered: we're home.
+                State stick = e instanceof Adb.AdbAuthException ? State.ON : State.UNREACHABLE;
                 ui(() -> {
                     if (gen != generation) return;
                     showTv(State.UNREACHABLE, true);
                     tvStatus.setText(adbError(e));
+                    genStick = stick;
+                    maybeVpn();
                 });
             }
         });
         for (LightRow r : rows.values()) io.execute(r::load);
         io.execute(this::findLights);
+    }
+
+    /** Away from home (server and FireStick both silent): switch on the "rxfilms" WireGuard tunnel. */
+    private void maybeVpn() {
+        if (genServer == null || genStick == null) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (!Vpn.shouldStart(genServer, genStick, now, vpnTriedAt)) return;
+        vpnTriedAt = now;
+        if (checkSelfPermission(Vpn.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {Vpn.PERMISSION}, 1);
+            return;
+        }
+        // Needs "Allow remote control apps" on in WireGuard's settings, or it's silently ignored.
+        sendBroadcast(new Intent(Vpn.ACTION_UP).setPackage(Vpn.PACKAGE).putExtra("tunnel", Vpn.TUNNEL));
+        serverStatus.setText("Away from home: connecting WireGuard (" + Vpn.TUNNEL + ")…");
+        Ui.reachable(serverStatus, true);
+        main.postDelayed(this::refresh, 4000);
     }
 
     /** Background: finds Tapo lights on the Wi-Fi, names them, and redraws if the list changed. */
