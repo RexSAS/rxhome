@@ -36,6 +36,9 @@ public class AdbTest {
         assert adb.shell("echo hi", 5000).trim().equals("hi"); // connection reused
         adb.close();
 
+        // Pops a real "Allow USB debugging?" on the TV; a prompt cut off mid-way can leave adbd stuck
+        // ("prompt currently pending") until ADB debugging is toggled. So it only runs when asked for.
+        if (System.getenv("RXHOME_ADB_PROMPT") == null) return;
         // A key the TV has never seen: we say a prompt is up, keep the line open for the user to accept
         // (closing it makes the TV drop the prompt), then give a clear error instead of hanging forever.
         Adb fresh = new Adb(host, 5555, Adb.generateKey());
