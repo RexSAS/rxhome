@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     // This refresh's server and FireStick results: both unreachable = away → WireGuard (see Vpn).
     private State genServer, genStick;
     private long vpnTriedAt, scannedAt;
+    private String vpnNote; // shown on the server card while WireGuard connects, or why it didn't
     private final Map<String, LightRow> rows = new LinkedHashMap<>();
 
     @Override
@@ -139,7 +140,9 @@ public class MainActivity extends Activity {
 
     private void showServer(State s, boolean fresh) {
         if (fresh) cfg.prefs.edit().putString("last_server", s.name()).apply();
-        serverStatus.setText(s == State.ON ? "● ONLINE" : "Status unknown: off, or not on home Wi-Fi / WireGuard");
+        if (s == State.ON) vpnNote = null;
+        serverStatus.setText(s == State.ON ? "● ONLINE"
+            : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
         serverStatus.setTextColor(s == State.ON ? Ui.RED : Ui.DIM);
         Ui.reachable(serverStatus, s == State.ON);
     }
@@ -529,10 +532,30 @@ public class MainActivity extends Activity {
             return;
         }
         // Needs "Allow remote control apps" on in WireGuard's settings, or it's silently ignored.
+        System.err.println("rxhome-vpn: asking WireGuard to bring up " + Vpn.TUNNEL);
         sendBroadcast(new Intent(Vpn.ACTION_UP).setPackage(Vpn.PACKAGE).putExtra("tunnel", Vpn.TUNNEL));
-        serverStatus.setText("Away from home: connecting WireGuard (" + Vpn.TUNNEL + ")…");
-        Ui.reachable(serverStatus, true);
-        main.postDelayed(this::refresh, 4000);
+        vpnNote = "Away from home: connecting WireGuard (" + Vpn.TUNNEL + ")…";
+        showServer(State.UNREACHABLE, false);
+        // The handshake home can take ~20 s: keep checking every 3 s for 30 s, until the server answers.
+        for (int i = 1; i <= 10; i++) {
+            main.postDelayed(() -> { if (genServer != State.ON && !isDestroyed()) refresh(); }, i * 3000L);
+        }
+        main.postDelayed(() -> {
+            if (isDestroyed() || vpnActive()) return;
+            System.err.println("rxhome-vpn: no VPN 6 s after asking");
+            vpnNote = "WireGuard didn't start: in the WireGuard app, Settings → turn on \"Allow remote control apps\"";
+            showServer(State.UNREACHABLE, false);
+        }, 6000);
+    }
+
+    /** True if Android has a VPN up (any app's). */
+    private boolean vpnActive() {
+        android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+        for (android.net.Network n : cm.getAllNetworks()) {
+            android.net.NetworkCapabilities c = cm.getNetworkCapabilities(n);
+            if (c != null && c.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)) return true;
+        }
+        return false;
     }
 
     /** Background: finds Tapo lights on the Wi-Fi, names them, and redraws if the list changed. */

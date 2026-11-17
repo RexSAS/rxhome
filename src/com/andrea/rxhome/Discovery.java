@@ -33,19 +33,19 @@ final class Discovery {
 
     private Discovery() {}
 
-    /** The phone's Wi-Fi IPv4 address (private range), or null when not on Wi-Fi. */
+    /**
+     * The phone's Wi-Fi IPv4 address, or null when not on Wi-Fi. Wi-Fi interfaces only: mobile data
+     * (rmnet) also has private-range addresses (e.g. 10.159.77.117/30), and scanning the carrier's is pointless.
+     */
     static String wifiIp() {
         try {
-            String any = null;
             for (NetworkInterface n : Collections.list(NetworkInterface.getNetworkInterfaces())) {
-                if (!n.isUp() || n.isLoopback()) continue;
+                if (!n.isUp() || n.isLoopback() || !n.getName().startsWith("wlan")) continue;
                 for (InetAddress a : Collections.list(n.getInetAddresses())) {
-                    if (!(a instanceof Inet4Address) || !a.isSiteLocalAddress()) continue;
-                    if (n.getName().startsWith("wlan")) return a.getHostAddress();
-                    if (any == null && !n.getName().startsWith("tun") && !n.getName().startsWith("wg")) any = a.getHostAddress();
+                    if (a instanceof Inet4Address && a.isSiteLocalAddress()) return a.getHostAddress();
                 }
             }
-            return any;
+            return null;
         } catch (IOException e) {
             return null;
         }
