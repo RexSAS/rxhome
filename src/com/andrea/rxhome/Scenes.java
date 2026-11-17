@@ -52,6 +52,76 @@ final class Scenes {
         return out;
     }
 
+    /** Scenes back to text (what the visual editor saves); parse(format(x)) gives x again. */
+    static String format(List<Scene> scenes) {
+        StringBuilder s = new StringBuilder();
+        for (Scene sc : scenes) {
+            s.append(cleanName(sc.name)).append(':');
+            for (int i = 0; i < sc.steps.size(); i++) s.append(i == 0 ? " " : "; ").append(formatStep(sc.steps.get(i)));
+            s.append('\n');
+        }
+        return s.toString();
+    }
+
+    static String formatStep(String[] step) {
+        StringBuilder s = new StringBuilder();
+        for (String t : step) {
+            if (s.length() > 0) s.append(' ');
+            s.append(t.contains(" ") ? "\"" + t + "\"" : t);
+        }
+        return s.toString();
+    }
+
+    /** A scene name without the format's separators (":" ";" quotes, newlines). */
+    static String cleanName(String name) {
+        String n = name.replaceAll("[:;\"\\r\\n]", "").replaceAll("\\s+", " ").trim();
+        return n.isEmpty() ? "Scene" : n;
+    }
+
+    private static final Map<String, String> APP_NAMES = new LinkedHashMap<>();
+    static {
+        APP_NAMES.put("org.rxfilms.tv", "RxFilms");
+        APP_NAMES.put("com.spotify.tv.android", "Spotify");
+        APP_NAMES.put("org.smarttube.stable", "YouTube");
+    }
+
+    /** The TV apps the editor offers (package → name). */
+    static Map<String, String> apps() {
+        return APP_NAMES;
+    }
+
+    /** A step in words, e.g. "All lights on · 20%". */
+    static String describe(String[] s) {
+        switch (s[0]) {
+            case "light": {
+                String who = s[1].equals("all") ? "All lights" : s[1];
+                StringBuilder d = new StringBuilder(who + " " + s[2]);
+                if (s[2].equals("on") && s.length >= 4) d.append(" · ").append(s[3]).append('%');
+                if (s.length == 5) {
+                    d.append(" · ").append(s[4].equals("warm") ? "warm white" : s[4].equals("cool") ? "cool white" : s[4] + "K");
+                }
+                return d.toString();
+            }
+            case "tv":
+                if (s[1].equals("app")) return "Open " + APP_NAMES.getOrDefault(s[2], s[2]) + " on the TV";
+                if (s[1].equals("music")) return "Claude FM on the TV";
+                return "TV " + s[1];
+            case "server":
+                return "Press the server's power button";
+            case "wait":
+                return "Wait " + s[1] + " s";
+            default:
+                return String.join(" ", s);
+        }
+    }
+
+    /** One line for Settings' scene rows. */
+    static String summary(Scene sc) {
+        int n = sc.steps.size();
+        if (n == 0) return "No steps yet";
+        return n + (n == 1 ? " step · " : " steps · ") + describe(sc.steps.get(0)) + (n > 1 ? ", …" : "");
+    }
+
     /** The lights setting: one "Name=IP" per line; lines without "=" or starting with "#" are ignored. */
     static Map<String, String> lights(String text) {
         Map<String, String> out = new LinkedHashMap<>();

@@ -35,6 +35,8 @@
             </intent-filter>
         </activity>
         <service android:name=".TunnelWatch" android:exported="false" />
+        <activity android:name=".SceneEditorActivity" android:exported="false"
+            android:screenOrientation="portrait" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".TvAppsActivity" android:exported="false"
             android:screenOrientation="portrait" />
         <activity android:name=".RemoteActivity" android:exported="false"

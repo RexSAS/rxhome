@@ -74,10 +74,9 @@ public class SettingsActivity extends Activity {
         lights.setMinLines(3);
 
         section(col, "Scenes");
-        EditText scenes = field(col, Config.SCENES, "One per line: Name: step; step; …\n"
-            + "Steps: light <name|all> on|off [0-100] [warm|cool]; tv on|off; tv app <package>; tv music; server press; wait <seconds>",
-            InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
-        scenes.setMinLines(5);
+        scenesBox = new LinearLayout(this);
+        scenesBox.setOrientation(LinearLayout.VERTICAL);
+        col.addView(scenesBox);
 
         error = Ui.text(this, "", 14, Ui.RED, false);
         col.addView(error);
@@ -250,13 +249,54 @@ public class SettingsActivity extends Activity {
         });
     }
 
-    private void save() {
+    private LinearLayout scenesBox;
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        renderScenes(); // back from the scene editor: show what changed
+    }
+
+    /** A row per scene (tap to edit), then "Add new scene". */
+    private void renderScenes() {
+        scenesBox.removeAllViews();
+        java.util.List<Scenes.Scene> list;
         try {
-            Scenes.parse(fields.get(Config.SCENES).getText().toString());
+            list = Scenes.parse(cfg.get(Config.SCENES));
         } catch (ParseException e) {
-            error.setText("Scenes: " + e.getMessage() + ". Nothing was saved.");
-            return;
+            scenesBox.addView(Ui.text(this, "Scenes can't be read: " + e.getMessage(), 13, Ui.RED, false));
+            return; // editing now would replace them all
         }
+        for (int i = 0; i < list.size(); i++) {
+            int index = i;
+            Scenes.Scene sc = list.get(i);
+            sceneRow(sc.name, Scenes.summary(sc), false, v -> openEditor(index));
+        }
+        sceneRow("+ Add new scene", "", true, v -> openEditor(-1));
+    }
+
+    private void sceneRow(String title, String sub, boolean add, View.OnClickListener open) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setBackground(Ui.button(this, "", add).getBackground());
+        int p = Ui.dp(this, 14);
+        row.setPadding(p, p, p, p);
+        row.addView(Ui.text(this, title, 16, add ? 0xFFFFFFFF : Ui.TEXT, true));
+        if (!sub.isEmpty()) row.addView(Ui.text(this, sub, 12, Ui.DIM, false));
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setContentDescription(title + (sub.isEmpty() ? "" : ", " + sub));
+        row.setOnClickListener(open);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.bottomMargin = Ui.dp(this, 8);
+        scenesBox.addView(row, lp);
+    }
+
+    private void openEditor(int index) {
+        startActivity(new android.content.Intent(this, SceneEditorActivity.class).putExtra("index", index));
+    }
+
+    private void save() {
         for (Map.Entry<String, EditText> f : fields.entrySet()) cfg.put(f.getKey(), f.getValue().getText().toString().trim());
         Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
         finish();

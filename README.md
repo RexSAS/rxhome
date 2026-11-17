@@ -37,7 +37,7 @@ Open ⚙ Settings:
    **Philips TV** (volume, mute, power): with the TV on, tap *Pair with the TV* and type the PIN it shows. Power state comes from what the TV announces over HDMI-CEC (its API answers the same on and in standby); on = `PowerOn` key (plus Wake-on-LAN), off = `Standby` key.
 4. **Tapo**: your Tapo account email and password. Lights and plugs are found on the Wi-Fi automatically (UDP broadcast, port 20002) and named as in the Tapo app; the list in Settings (`Name=IP`) can be renamed and follows lights whose IP changes. Put `#` before a name (`#Desk strip=…`) to hide that light from rxhome and its scenes; discovery won't add it back.
    Lights on 2025 firmware (TPAP login, e.g. the L900-5 strips) only accept rxhome's local login with **Third-Party Compatibility** on: Tapo app → Me → Third-Party Services → Third-Party Compatibility. Until then they show as "L900 .10" and stay grey; tap one to see why.
-5. **Scenes**: one per line, `Name: step; step; …`. Steps: `light <name|all> on|off [0-100] [warm|cool]`, `tv on|off`, `tv app <package>`, `tv music` (Claude FM in SmartTube), `server press`, `wait <seconds>`. Names with spaces go in quotes: `light "LED strip" on 100`.
+5. **Scenes**: Settings lists your scenes; tap one to edit it, or *Add new scene*. The editor builds a scene by tapping: a name, then steps (lights: which, on/off, brightness, warm/cool white; TV on/off; open RxFilms / Spotify / YouTube; Claude FM; the server's power button; wait), each movable and removable. Saved in the same text format as before.
 
 
 ## Known limits
