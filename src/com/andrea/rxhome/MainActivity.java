@@ -61,6 +61,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Coming back counts as wanting the tunnel again (TunnelWatch may have switched it off): the
+        // once-a-minute limit is only for rxhome's own re-checks.
+        vpnTriedAt = -Vpn.RETRY_MS;
         // Rebuilt on every resume: settings may have changed lights or scenes.
         setContentView(build());
         refresh();
