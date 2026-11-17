@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
 
     private TextView serverStatus, tvStatus;
     private LinearLayout tvTile;
-    private boolean serverArmed;
+    private final Confirm serverConfirm = new Confirm();
     private final Map<String, LightRow> rows = new LinkedHashMap<>();
 
     @Override
@@ -143,19 +143,19 @@ public class MainActivity extends Activity {
             return;
         }
         // It's a hard press on the power button: ask for a second tap.
-        if (!serverArmed) {
-            serverArmed = true;
+        long now = android.os.SystemClock.uptimeMillis();
+        boolean wasArmed = serverConfirm.armed(now);
+        if (!serverConfirm.tap(now)) {
+            if (wasArmed) return; // a jittery double-tap: ignored
             serverStatus.setText("Tap the power button again to press the server's button");
             Ui.reachable(serverStatus, true);
             main.postDelayed(() -> {
-                if (serverArmed) {
-                    serverArmed = false;
+                if (!serverConfirm.armed(android.os.SystemClock.uptimeMillis())) {
                     showServer(State.valueOf(cfg.prefs.getString("last_server", State.UNREACHABLE.name())), false);
                 }
-            }, 3000);
+            }, Confirm.MAX_MS + 50);
             return;
         }
-        serverArmed = false;
         serverStatus.setText("Pressing…");
         io.execute(() -> {
             try {

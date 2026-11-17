@@ -36,6 +36,27 @@ public class TapoTest {
             assert System.currentTimeMillis() - t0 < 2000 : "grey took " + (System.currentTimeMillis() - t0) + " ms";
         }
 
+        // Older firmware (no KLAP, 404 on handshake1) that answers the passthrough handshake with junk:
+        // an IOException, never an unchecked exception that would kill the app's background thread.
+        com.sun.net.httpserver.HttpServer old = com.sun.net.httpserver.HttpServer.create(
+            new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        old.createContext("/", x -> {
+            boolean klap = x.getRequestURI().getPath().startsWith("/app/handshake1");
+            byte[] body = (klap ? "" : "{\"error_code\":0,\"result\":{\"key\":\"!!not base64!!\"}}").getBytes("UTF-8");
+            x.sendResponseHeaders(klap ? 404 : 200, body.length == 0 ? -1 : body.length);
+            if (body.length > 0) x.getResponseBody().write(body);
+            x.close();
+        });
+        old.start();
+        try {
+            new Tapo("127.0.0.1:" + old.getAddress().getPort(), "a@b.c", "pw").info();
+            throw new AssertionError("junk accepted");
+        } catch (java.io.IOException expected) {
+            // ok
+        } finally {
+            old.stop(0);
+        }
+
         // set_device_info only carries what was asked, and drops colour temperature on devices without it.
         assert Tapo.setParams(true, 20, 2700, false).equals("{\"device_on\":true,\"brightness\":20}");
         assert Tapo.setParams(false, null, null, true).equals("{\"device_on\":false}");

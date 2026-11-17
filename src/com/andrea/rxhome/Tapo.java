@@ -69,6 +69,17 @@ class Tapo {
     }
 
     private synchronized JSONObject call(String json) throws IOException {
+        try {
+            return attempt(json);
+        } catch (RuntimeException e) {
+            // Garbled replies (bad base64, bad padding) must grey the card, not kill the background thread.
+            klap = null;
+            ptKey = null;
+            throw new IOException("Tapo sent an unreadable reply");
+        }
+    }
+
+    private JSONObject attempt(String json) throws IOException {
         boolean hadSession = klap != null || ptKey != null;
         try {
             return result(send(json));
