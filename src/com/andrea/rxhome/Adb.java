@@ -36,6 +36,10 @@ class Adb {
     private final String host;
     private final int port;
     private final KeyPair key;
+    /** How long to hold the line while the TV shows "Allow USB debugging?": closing it drops the prompt. */
+    volatile int authWaitMs = 60000;
+    /** Called (on the calling thread) when the TV starts showing the prompt. */
+    volatile Runnable onKeyPrompt;
     private Socket socket;
     private DataInputStream in;
     private OutputStream out;
@@ -112,9 +116,12 @@ class Adb {
                 send(AUTH, 2, 0, sign(m.data));
                 signed = true;
             } else {
-                // Our signature was refused: offer the public key, the TV shows a prompt.
+                // Our signature was refused: offer the public key; the TV shows a prompt.
                 send(AUTH, 3, 0, (publicKeyString((RSAPublicKey) key.getPublic(), "rxhome") + "\0")
                     .getBytes(StandardCharsets.UTF_8));
+                s.setSoTimeout(authWaitMs);
+                Runnable r = onKeyPrompt;
+                if (r != null) r.run();
             }
         }
     }

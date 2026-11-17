@@ -24,6 +24,11 @@ class FireTv {
         this.adb = adb;
     }
 
+    /** Runs when the TV starts showing "Allow USB debugging?" for this phone. */
+    void onKeyPrompt(Runnable r) {
+        adb.onKeyPrompt = r;
+    }
+
     State state() {
         try {
             return checkedState();

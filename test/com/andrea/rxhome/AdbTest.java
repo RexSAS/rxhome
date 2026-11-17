@@ -36,13 +36,20 @@ public class AdbTest {
         assert adb.shell("echo hi", 5000).trim().equals("hi"); // connection reused
         adb.close();
 
-        // A key the TV has never seen: we get a clear error, not a hang.
+        // A key the TV has never seen: we say a prompt is up, keep the line open for the user to accept
+        // (closing it makes the TV drop the prompt), then give a clear error instead of hanging forever.
+        Adb fresh = new Adb(host, 5555, Adb.generateKey());
+        fresh.authWaitMs = 4000;
+        boolean[] prompted = {false};
+        fresh.onKeyPrompt = () -> prompted[0] = true;
         long t0 = System.currentTimeMillis();
         try {
-            new Adb(host, 5555, Adb.generateKey()).shell("echo x", 2000);
+            fresh.shell("echo x", 1500);
             throw new AssertionError("unknown key was accepted");
         } catch (Adb.AdbAuthException expected) {
-            assert System.currentTimeMillis() - t0 < 6000;
+            long took = System.currentTimeMillis() - t0;
+            assert prompted[0] : "no prompt callback";
+            assert took >= 3500 && took < 8000 : "waited " + took + " ms";
         }
     }
 

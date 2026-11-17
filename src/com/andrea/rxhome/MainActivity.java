@@ -203,6 +203,7 @@ public class MainActivity extends Activity {
     private void showTv(State s, boolean fresh) {
         if (fresh) cfg.prefs.edit().putString("last_tv", s.name()).apply();
         tvStatus.setText(s == State.ON ? "On · FireStick" : s == State.OFF ? "Standby · FireStick" : AWAY);
+        tvStatus.setTextColor(Ui.DIM);
         Ui.reachable(tvTile, s != State.UNREACHABLE);
     }
 
@@ -223,7 +224,7 @@ public class MainActivity extends Activity {
     }
 
     static String adbError(IOException e) {
-        return e instanceof Adb.AdbAuthException ? "Accept the USB debugging prompt on the TV, then try again" : AWAY;
+        return e instanceof Adb.AdbAuthException ? "The TV's prompt wasn't accepted. Tap ↻ to show it again" : AWAY;
     }
 
     /** The FireStick's apps, known ones first by name; tap to open on the TV. */
@@ -424,6 +425,11 @@ public class MainActivity extends Activity {
             ui(() -> { if (gen == generation) showServer(s, true); });
         });
         FireTv tv = cfg.tv();
+        tv.onKeyPrompt(() -> ui(() -> {
+            Ui.reachable(tvTile, true);
+            tvStatus.setText("On the TV: tick \"Always allow\", then Allow");
+            tvStatus.setTextColor(Ui.RED);
+        }));
         io.execute(() -> {
             try {
                 State s = tv.checkedState();
