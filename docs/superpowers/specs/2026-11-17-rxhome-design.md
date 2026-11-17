@@ -83,7 +83,7 @@ A scene is an ordered list of steps; a step is one of:
 
 `all` means every configured light, LED strip included; a later step can override one light (Gaming = `all 30%` then `LED strip on 100%`). Colour temperature (`warm` = 2700 K, `cool` = 6500 K) is sent only to lights that support it and ignored by the rest; the light cards themselves stay on/off + brightness (my call).
 
-Stored as JSON in settings, editable as text in the app (my call: cheapest editor that still lets the user change scenes on the phone). Seeded with:
+Stored as plain text in settings, one scene per line (`Name: step; step; …`), editable in the app (my call: cheapest editor that still lets the user change scenes on the phone; format in the plan, Task 2). Seeded with:
 
 - **Movie night:** lights 20%, TV on, wait 5, open RxFilms
 - **Music:** lights warm 60%, TV on, wait 5, ClaudeFm
