@@ -55,7 +55,9 @@ public class SettingsActivity extends Activity {
         field(col, Config.FIRETV, "FireStick IP address (ADB debugging on)", InputType.TYPE_CLASS_PHONE, false);
         field(col, Config.PHILIPS_IP, "Philips TV IP address (for its volume and power; the TV must be on to pair)",
             InputType.TYPE_CLASS_PHONE, false);
-        TextView pairTv = Ui.button(this, cfg.get(Config.PHILIPS_USER).isEmpty() ? "PAIR WITH THE TV" : "PAIR WITH THE TV AGAIN", false);
+        field(col, Config.PHILIPS_MAC, "Philips TV MAC address (switches it on from standby: enable \"Switch on with Wi-Fi\" on the TV)",
+            0, false);
+        TextView pairTv = Ui.button(this,cfg.get(Config.PHILIPS_USER).isEmpty() ? "PAIR WITH THE TV" : "PAIR WITH THE TV AGAIN", false);
         pairTv.setOnClickListener(this::pairTv);
         col.addView(pairTv);
 

@@ -27,10 +27,6 @@ public class FireTvTest {
                 if (broken) throw new java.io.IOException("TV asleep");
                 calls.add("tv " + k);
             }
-            @Override void power(boolean on) throws java.io.IOException {
-                if (broken) throw new java.io.IOException("TV asleep");
-                calls.add("tv power " + on);
-            }
         };
     }
 
@@ -42,7 +38,6 @@ public class FireTvTest {
                 return on;
             }
             @Override void key(String k) { calls.add("tv " + k); }
-            @Override void power(boolean v) { calls.add("tv power " + v); }
         };
     }
 
@@ -54,7 +49,7 @@ public class FireTvTest {
         assert calls.equals(java.util.Arrays.asList("tv Standby", "stick 223")) : calls;
         calls.clear();
         t.wake();
-        assert calls.equals(java.util.Arrays.asList("tv power true", "stick 224")) : calls;
+        assert calls.equals(java.util.Arrays.asList("stick 224")) : calls; // TV on = Wake-on-LAN (no MAC in this test)
         calls.clear();
         t.tvKey("VolumeUp");
         assert calls.equals(java.util.Arrays.asList("tv VolumeUp")) : calls;
@@ -72,7 +67,7 @@ public class FireTvTest {
             p.togglePower(State.ON);
             assert calls.equals(on != null && on
                 ? java.util.Arrays.asList("tv Standby", "stick 223")
-                : java.util.Arrays.asList("tv power true", "stick 224")) : on + " " + calls;
+                : java.util.Arrays.asList("stick 224")) : on + " " + calls;
         }
         // Away from home (stick unreachable too): the TV's state is unknown, not "off".
         FireTv awayTv = stick();

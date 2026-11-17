@@ -21,6 +21,7 @@ final class Config {
         DEFAULTS.put(SERVER_PUBLIC, "https://rxfilms.rxsas.it");
         DEFAULTS.put(FIRETV, "192.168.1.49");
         DEFAULTS.put(PHILIPS_IP, "192.168.1.221");
+        DEFAULTS.put(PHILIPS_MAC, "d4:0a:dc:d6:c7:44"); // seen on the LAN 2026-11-17; pairing overwrites it if the TV reports one
         DEFAULTS.put(SCENES, Scenes.DEFAULT);
     }
 

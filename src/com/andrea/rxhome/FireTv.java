@@ -144,26 +144,19 @@ class FireTv {
                 p.key("Standby");
             } catch (IOException e) {
                 // Already off, or not on this network: the stick still goes to sleep.
+                log("standby", e);
             }
         }
         key(SLEEP);
     }
 
-    /** TV on (Wake-on-LAN, then the API if it's awake), then the stick. */
+    /** TV on (Wake-on-LAN: the TV needs "Switch on with Wi-Fi"), then the stick. */
     void wake() throws IOException {
         if (philipsMac != null) {
             try {
                 Philips.wake(philipsMac);
             } catch (IOException | IllegalArgumentException e) {
                 // No broadcast here (away from home): the API call below may still work.
-            }
-        }
-        Philips p = philips;
-        if (p != null) {
-            try {
-                p.power(true);
-            } catch (IOException e) {
-                // Still waking up: Wake-on-LAN has been sent.
             }
         }
         key(WAKEUP);
@@ -178,10 +171,18 @@ class FireTv {
         Philips p = philips;
         if (p == null) return stick;
         try {
-            return p.isOn() ? State.ON : State.OFF;
+            boolean on = p.isOn();
+            System.err.println("rxhome-tv: power state " + (on ? "on" : "standby"));
+            return on ? State.ON : State.OFF;
         } catch (IOException e) {
+            log("power state", e);
             return stick == State.UNREACHABLE ? State.UNREACHABLE : State.OFF;
         }
+    }
+
+    /** TV errors that don't stop the action go to the system log (Android: tag System.err). No secrets. */
+    private static void log(String what, Exception e) {
+        System.err.println("rxhome-tv: " + what + " failed: " + e);
     }
 
     /** The power button: by the TV's state, not the stick's. */

@@ -61,14 +61,22 @@ class Philips {
         request("POST", "/6/input/key", "{\"key\":\"" + key + "\"}", ip, user, pass, certPin, null);
     }
 
-    /** True when the TV is on (not standby). In deep standby it's off the network: IOException. */
+    /**
+     * True when the TV is on. This TV (JointSPACE 6.1, Linux) has no /6/powerstate (404) and drops off
+     * Wi-Fi in standby, so "on" = its API answers (plain HTTP 1925, no login). Off the network: IOException.
+     */
     boolean isOn() throws IOException {
-        String r = request("GET", "/6/powerstate", null, ip, user, pass, certPin, null);
-        return r.replace(" ", "").contains("\"powerstate\":\"On\"");
-    }
-
-    void power(boolean on) throws IOException {
-        request("POST", "/6/powerstate", "{\"powerstate\":\"" + (on ? "On" : "Standby") + "\"}", ip, user, pass, certPin, null);
+        String host = ip.contains(":") ? ip.substring(0, ip.indexOf(':')) : ip;
+        HttpURLConnection c = (HttpURLConnection) new URL("http://" + host + ":1925/6/system").openConnection();
+        c.setConnectTimeout(1500);
+        c.setReadTimeout(2000);
+        try {
+            int code = c.getResponseCode();
+            drain(c, code);
+            return code == 200;
+        } finally {
+            c.disconnect();
+        }
     }
 
     /** The TV's MAC on the interface we talk to, for Wake-on-LAN; null if unknown. */
