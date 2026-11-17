@@ -73,7 +73,11 @@ final class Ui {
         TextView b = text(c, label, 14, primary ? Color.WHITE : TEXT, true);
         b.setGravity(Gravity.CENTER);
         b.setLetterSpacing(0.06f);
-        b.setBackground(flat(primary ? RED : BUTTON));
+        // Pressed: red for normal buttons, a darker red for the red one.
+        android.graphics.drawable.StateListDrawable bg = new android.graphics.drawable.StateListDrawable();
+        bg.addState(new int[] {android.R.attr.state_pressed}, flat(primary ? 0xffb3142b : RED));
+        bg.addState(new int[] {}, flat(primary ? RED : BUTTON));
+        b.setBackground(bg);
         int p = dp(c, 12);
         b.setPadding(p, p, p, p);
         b.setClickable(true);

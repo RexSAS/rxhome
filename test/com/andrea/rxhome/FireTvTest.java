@@ -3,6 +3,16 @@ package com.andrea.rxhome;
 import java.io.File;
 
 public class FireTvTest {
+    interface Io { void go() throws Exception; }
+
+    static void run(Io io) {
+        try {
+            io.go();
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
     public static void main(String[] a) throws Exception {
         // Nothing listens on port 9: unreachable, and fast (the home screen never waits on a dead device).
         long t0 = System.currentTimeMillis();
@@ -45,6 +55,25 @@ public class FireTvTest {
                 long took = System.currentTimeMillis() - k0;
                 assert took < 150 : "key took " + took + " ms";
             }
+            // Holding a key: down, repeats while held, up on release, each a single fast round trip.
+            for (Runnable step : new Runnable[] {
+                () -> run(() -> fast.keyDown(0)), () -> run(() -> fast.keyRepeat(0, 1)), () -> run(() -> fast.keyUp(0))}) {
+                long k0 = System.currentTimeMillis();
+                step.run();
+                long took = System.currentTimeMillis() - k0;
+                assert took < 150 : "hold step took " + took + " ms";
+            }
+            // On the TV a hold looks like the real remote's: DOWN, DOWN (repeat), UP. Keycode 4 (BACK)
+            // is logged by Fire OS; a back press on the home screen does nothing visible.
+            Adb probe = new Adb(host, 5555, AdbTest.pem(priv));
+            probe.shell("logcat -c", 3000);
+            fast.keyDown(4);
+            fast.keyRepeat(4, 1);
+            fast.keyUp(4);
+            Thread.sleep(300);
+            String log = probe.shell("logcat -d | grep 'Received Key name: BACK'", 3000);
+            probe.close();
+            assert log.split("action: 0").length - 1 == 2 && log.split("action: 1").length - 1 == 1 : log;
             fast.close();
             // Key not accepted yet: the screen needs the reason. Pops a TV prompt, so opt-in only.
             if (System.getenv("RXHOME_ADB_PROMPT") != null) try {

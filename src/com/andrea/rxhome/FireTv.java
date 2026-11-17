@@ -64,20 +64,38 @@ class FireTv {
 
     /** One d-pad key: through the helper when it runs (one round trip), else `input` (~1 s on Fire OS). */
     synchronized void key(int code) throws IOException {
-        if (helperDex != null && keysAdb != null) {
-            try {
-                if (keys == null && System.currentTimeMillis() - helperFailedAt > HELPER_RETRY_MS) startHelper();
-                if (keys != null) {
-                    keys.writeLine(Integer.toString(code), 2000);
-                    if ("ok".equals(keys.readLine(2000))) return;
-                }
-            } catch (IOException | RuntimeException e) {
-                keys = null;
-                helperFailedAt = System.currentTimeMillis();
-                keysAdb.close();
+        if (!helper(Integer.toString(code))) adb.shell("input dpad keyevent " + code, 3000);
+    }
+
+    /** Start holding a key; without the helper it's a plain press. */
+    synchronized void keyDown(int code) throws IOException {
+        if (!helper("d " + code)) adb.shell("input dpad keyevent " + code, 3000);
+    }
+
+    /** n-th repeat while held. Helper only: slow `input` presses would pile up behind the finger. */
+    synchronized void keyRepeat(int code, int n) {
+        helper("r " + code + " " + n);
+    }
+
+    synchronized void keyUp(int code) {
+        helper("u " + code);
+    }
+
+    /** Sends one helper command; false if the helper isn't available (caller falls back or skips). */
+    private boolean helper(String command) {
+        if (helperDex == null || keysAdb == null) return false;
+        try {
+            if (keys == null && System.currentTimeMillis() - helperFailedAt > HELPER_RETRY_MS) startHelper();
+            if (keys != null) {
+                keys.writeLine(command, 2000);
+                if ("ok".equals(keys.readLine(2000))) return true;
             }
+        } catch (IOException | RuntimeException e) {
+            keys = null;
+            helperFailedAt = System.currentTimeMillis();
+            keysAdb.close();
         }
-        adb.shell("input dpad keyevent " + code, 3000);
+        return false;
     }
 
     /** Pushes the helper once (named by content, so a new build replaces it) and starts it. */
