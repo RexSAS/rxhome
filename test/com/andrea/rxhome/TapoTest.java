@@ -27,6 +27,15 @@ public class TapoTest {
             // ok
         }
 
+        // An unreachable light fails within the LAN budget (no retry of a login that never connected).
+        long t0 = System.currentTimeMillis();
+        try {
+            new Tapo("192.168.1.250", "a@b.c", "pw").info();
+            throw new AssertionError("reached a missing light");
+        } catch (java.io.IOException expected) {
+            assert System.currentTimeMillis() - t0 < 2000 : "grey took " + (System.currentTimeMillis() - t0) + " ms";
+        }
+
         // set_device_info only carries what was asked, and drops colour temperature on devices without it.
         assert Tapo.setParams(true, 20, 2700, false).equals("{\"device_on\":true,\"brightness\":20}");
         assert Tapo.setParams(false, null, null, true).equals("{\"device_on\":false}");

@@ -69,12 +69,14 @@ class Tapo {
     }
 
     private synchronized JSONObject call(String json) throws IOException {
+        boolean hadSession = klap != null || ptKey != null;
         try {
             return result(send(json));
         } catch (IOException e) {
-            // Sessions expire (TIMEOUT cookie); log in again once.
             klap = null;
             ptKey = null;
+            // Sessions expire (TIMEOUT cookie): log in again once, but never retry a fresh login.
+            if (!hadSession) throw e;
             return result(send(json));
         }
     }

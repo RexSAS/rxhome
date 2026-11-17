@@ -8,31 +8,20 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/**
- * The FireStick over ADB, plus TV power through the SwitchBot Hub Mini's IR: Fire OS never sends
- * CEC Standby, so the TV itself is switched by infrared (see the design doc).
- */
+/** The FireStick over ADB: power, keys, apps, music. */
 class FireTv {
 
     // Fire OS 8 ignores these keys unless they come from the d-pad source.
     static final int SLEEP = 223, WAKEUP = 224;
     static final String CLAUDE_FM_FALLBACK = "tRsQsTMvPNg";
 
-    private static final Pattern TV_POWER = Pattern.compile("\\[R\\][^\\n]*<Report Power Status> 0[0-9a-f]:90:0([0-3])");
-
     private final Adb adb;
-    private final SwitchBot sb;
-    private final String irTvId;
 
-    FireTv(Adb adb, SwitchBot sb, String irTvId) {
+    FireTv(Adb adb) {
         this.adb = adb;
-        this.sb = sb;
-        this.irTvId = irTvId;
     }
 
     State state() {
@@ -47,39 +36,14 @@ class FireTv {
         adb.shell("input dpad keyevent " + code, 3000);
     }
 
-    /** TV off by IR (if set up), then the stick to sleep. */
+    // The Philips follows only through its own settings (EasyLink, "switch off with no signal"):
+    // Fire OS never sends CEC Standby and its remote's IR is closed to apps (see the design doc).
     void sleep() throws IOException {
-        IOException irError = null;
-        if (sb != null && irTvId != null) {
-            try {
-                sb.command(irTvId, "turnOff");
-            } catch (IOException e) {
-                irError = e;
-            }
-        }
         key(SLEEP);
-        if (irError != null) throw irError;
     }
 
-    /** Wakes the stick; if the TV hasn't reported "on" over CEC within 4 s, switches it on by IR. */
     void wake() throws IOException {
         key(WAKEUP);
-        if (sb == null || irTvId == null) return;
-        try {
-            Thread.sleep(4000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return;
-        }
-        if (!tvReportsOn()) sb.command(irTvId, "turnOn");
-    }
-
-    boolean tvReportsOn() {
-        try {
-            return parseTvOn(adb.shell("dumpsys hdmi_control | grep 'Report Power Status'", 3000));
-        } catch (IOException e) {
-            return false;
-        }
     }
 
     void launch(String pkg) throws IOException {
@@ -98,14 +62,6 @@ class FireTv {
 
     static State parseAwake(String dump) {
         return dump.contains("mWakefulness=Awake") ? State.ON : State.OFF;
-    }
-
-    /** The TV's last CEC power report: 0 = on, 2 = turning on. */
-    static boolean parseTvOn(String dump) {
-        Matcher m = TV_POWER.matcher(dump);
-        String last = null;
-        while (m.find()) last = m.group(1);
-        return "0".equals(last) || "2".equals(last);
     }
 
     /** Current Claude FM live stream id (same lookup as rxhome-tv's ClaudeFm), or the last known one. */

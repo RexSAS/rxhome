@@ -13,16 +13,6 @@ public class FireTvTest {
         assert Server.status("http://192.168.1.250:8096") == State.UNREACHABLE;
         assert System.currentTimeMillis() - t0 < 2500 : System.currentTimeMillis() - t0;
 
-        // The TV's CEC power reports, as dumpsys hdmi_control prints them; the last one wins.
-        String on = "    [R] time=2026-11-17 19:52:21 message=<Report Power Status> 04:90:00\n";
-        String standby = "    [R] time=2026-11-17 19:58:02 message=<Report Power Status> 04:90:01\n";
-        assert FireTv.parseTvOn(on);
-        assert !FireTv.parseTvOn(standby);
-        assert !FireTv.parseTvOn(on + standby);
-        assert FireTv.parseTvOn(standby + on);
-        assert !FireTv.parseTvOn("");
-        // Our own outgoing request is not the TV's answer.
-        assert !FireTv.parseTvOn("    [S] time=2026-11-17 19:52:20 message=<Report Power Status> 40:90:00\n");
 
         assert FireTv.parseAwake("  mWakefulness=Awake\n") == State.ON;
         assert FireTv.parseAwake("  mWakefulness=Asleep\n") == State.OFF;
@@ -34,10 +24,10 @@ public class FireTvTest {
         String host = System.getenv("RXHOME_ADB");
         File priv = new File(System.getProperty("user.home"), ".android/adbkey");
         if (host != null && priv.exists()) {
-            FireTv tv = new FireTv(new Adb(host, 5555, AdbTest.pem(priv)), null, null);
+            FireTv tv = new FireTv(new Adb(host, 5555, AdbTest.pem(priv)));
             assert tv.state() != State.UNREACHABLE;
         }
-        FireTv away = new FireTv(new Adb("192.168.1.250", 5555, Adb.generateKey()), null, null);
+        FireTv away = new FireTv(new Adb("192.168.1.250", 5555, Adb.generateKey()));
         t0 = System.currentTimeMillis();
         assert away.state() == State.UNREACHABLE;
         assert System.currentTimeMillis() - t0 < 2000 : "grey took " + (System.currentTimeMillis() - t0) + " ms";
