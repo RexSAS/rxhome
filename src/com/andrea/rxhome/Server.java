@@ -10,8 +10,18 @@ final class Server {
 
     private Server() {}
 
-    /** ON if Jellyfin answers; otherwise UNREACHABLE (off and out of reach look the same, so never OFF). */
-    static State status(String baseUrl) {
+    /**
+     * ON if Jellyfin answers at any of the addresses (LAN first, then public); otherwise UNREACHABLE
+     * (off and out of reach look the same, so never OFF).
+     */
+    static State status(String... baseUrls) {
+        for (String u : baseUrls) {
+            if (u != null && !u.isEmpty() && one(u) == State.ON) return State.ON;
+        }
+        return State.UNREACHABLE;
+    }
+
+    private static State one(String baseUrl) {
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(baseUrl + "/System/Info/Public").openConnection();

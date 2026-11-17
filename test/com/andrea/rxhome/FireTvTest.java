@@ -18,8 +18,13 @@ public class FireTvTest {
         assert FireTv.parseAwake("  mWakefulness=Asleep\n") == State.OFF;
         assert FireTv.parseAwake("  mWakefulness=Dozing\n") == State.OFF;
 
+        // LAN address first, then the public one (rxfilms.rxsas.it): any answer means online.
+        assert Server.status("http://127.0.0.1:9", "http://127.0.0.1:9") == State.UNREACHABLE;
         String server = System.getenv("RXHOME_SERVER");
-        if (server != null) assert Server.status(server) == State.ON;
+        if (server != null) {
+            assert Server.status(server) == State.ON;
+            assert Server.status("http://127.0.0.1:9", server) == State.ON : "fallback not tried";
+        }
 
         String host = System.getenv("RXHOME_ADB");
         File priv = new File(System.getProperty("user.home"), ".android/adbkey");

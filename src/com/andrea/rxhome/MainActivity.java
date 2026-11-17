@@ -39,7 +39,7 @@ public class MainActivity extends Activity {
     private Config cfg;
     private int generation;
 
-    private TextView serverStatus, tvStatus;
+    private TextView serverStatus, serverStats, tvStatus;
     private LinearLayout tvTile;
     private final Confirm serverConfirm = new Confirm();
     private final Map<String, LightRow> rows = new LinkedHashMap<>();
@@ -118,6 +118,10 @@ public class MainActivity extends Activity {
         text.addView(Ui.text(this, "rexserver", 18, Ui.TEXT, true));
         serverStatus = Ui.text(this, "", 13, Ui.DIM, false);
         text.addView(serverStatus);
+        serverStats = Ui.text(this, "", 13, Ui.TEXT, false);
+        serverStats.setFontFeatureSettings("tnum");
+        text.addView(serverStats);
+        showStats(cfg.prefs.getString("last_stats", null), false);
         row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
         TextView power = Ui.power(this);
         power.setOnClickListener(this::serverPower);
@@ -132,6 +136,22 @@ public class MainActivity extends Activity {
         serverStatus.setText(s == State.ON ? "● ONLINE" : "Status unknown: off, or not on home Wi-Fi / WireGuard");
         serverStatus.setTextColor(s == State.ON ? Ui.RED : Ui.DIM);
         Ui.reachable(serverStatus, s == State.ON);
+    }
+
+    /** CPU · temp · RAM · uptime line; hidden when node_exporter can't be reached. */
+    private void showStats(String stats, boolean fresh) {
+        if (fresh && stats != null) cfg.prefs.edit().putString("last_stats", stats).apply();
+        serverStats.setText(stats == null ? "" : stats);
+        serverStats.setVisibility(stats == null ? View.GONE : View.VISIBLE);
+    }
+
+    // shortcut: node_exporter assumed on the Jellyfin LAN host at :9100; make it a setting if it ever moves.
+    static String metricsUrl(String jellyfinLan) {
+        try {
+            return "http://" + new java.net.URL(jellyfinLan).getHost() + ":9100/metrics";
+        } catch (java.net.MalformedURLException e) {
+            return "";
+        }
     }
 
     private void serverPower(View v) {
@@ -419,10 +439,14 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         int gen = ++generation;
-        String server = cfg.get(Config.SERVER);
+        String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         io.execute(() -> {
-            State s = Server.status(server);
+            State s = Server.status(server, pub);
             ui(() -> { if (gen == generation) showServer(s, true); });
+        });
+        io.execute(() -> {
+            String stats = Metrics.fetch(metricsUrl(server));
+            ui(() -> { if (gen == generation) showStats(stats, true); });
         });
         FireTv tv = cfg.tv();
         tv.onKeyPrompt(() -> ui(() -> {

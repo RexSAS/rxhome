@@ -10,13 +10,14 @@ import java.util.Map;
 /** Settings (app-private SharedPreferences) and the device clients built from them. */
 final class Config {
 
-    static final String SERVER = "server", FIRETV = "firetv", SB_TOKEN = "sb_token", SB_SECRET = "sb_secret",
+    static final String SERVER = "server", SERVER_PUBLIC = "server_public", FIRETV = "firetv", SB_TOKEN = "sb_token", SB_SECRET = "sb_secret",
         SB_BOT = "sb_bot", TAPO_EMAIL = "tapo_email", TAPO_PASSWORD = "tapo_password", LIGHTS = "lights",
         SCENES = "scenes";
 
     private static final Map<String, String> DEFAULTS = new LinkedHashMap<>();
     static {
         DEFAULTS.put(SERVER, "http://192.168.1.166:8096");
+        DEFAULTS.put(SERVER_PUBLIC, "https://rxfilms.rxsas.it");
         DEFAULTS.put(FIRETV, "192.168.1.49");
         DEFAULTS.put(SCENES, Scenes.DEFAULT);
     }

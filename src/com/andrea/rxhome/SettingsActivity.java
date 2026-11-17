@@ -41,6 +41,7 @@ public class SettingsActivity extends Activity {
 
         section(col, "Server");
         field(col, Config.SERVER, "Jellyfin on the LAN (shows if the server is up)", InputType.TYPE_TEXT_VARIATION_URI, false);
+        field(col, Config.SERVER_PUBLIC, "Jellyfin public address, tried when the LAN one doesn't answer", InputType.TYPE_TEXT_VARIATION_URI, false);
 
         section(col, "SwitchBot (server power button)");
         field(col, Config.SB_TOKEN, "Token: SwitchBot app → Profile → Preferences → tap App Version 10× → Developer Options", 0, true);
