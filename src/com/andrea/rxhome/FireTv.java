@@ -8,6 +8,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
+import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -227,12 +228,45 @@ class FireTv {
     }
 
     void launch(String pkg) throws IOException {
+        safe(pkg); // scene text reaches here ("tv app <package>")
         adb.shell("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1", 5000);
     }
 
-    /** Plays a YouTube video on the TV; SmartTube picks up the link. */
+    static final String SMARTTUBE = "org.smarttube.stable", SPOTIFY = "com.spotify.tv.android",
+        RXFILMS = "org.rxfilms.tv/org.jellyfin.androidtv.ui.startup.StartupActivity";
+
+    /** Plays a YouTube video on the TV, in SmartTube. */
     void play(String youtubeId) throws IOException {
-        adb.shell("am start -a android.intent.action.VIEW -d https://www.youtube.com/watch?v=" + youtubeId, 5000);
+        view("https://www.youtube.com/watch?v=" + youtubeId, SMARTTUBE);
+    }
+
+    /** Opens a link in a TV app, e.g. a Spotify playlist. */
+    void view(String uri, String pkg) throws IOException {
+        adb.shell(viewCommand(uri, pkg), 5000);
+    }
+
+    /** Opens a Jellyfin item in RxFilms (its details page, one OK from playing). */
+    void openItem(String component, String itemId) throws IOException {
+        adb.shell(itemCommand(component, itemId), 5000);
+    }
+
+    // Only plain URL/package characters reach the TV's shell: no quotes, spaces, ; | $ ` & etc.
+    private static final Pattern SAFE = Pattern.compile("[A-Za-z0-9:/._?=%+-]+");
+
+    static String viewCommand(String uri, String pkg) {
+        safe(uri);
+        safe(pkg);
+        return "am start -a android.intent.action.VIEW -d '" + uri + "' -p " + pkg;
+    }
+
+    static String itemCommand(String component, String itemId) {
+        safe(component);
+        if (!itemId.matches("[0-9a-fA-F-]{32,36}")) throw new IllegalArgumentException("Not a Jellyfin item id: " + itemId);
+        return "am start -n " + component + " --es ItemId " + itemId;
+    }
+
+    private static void safe(String s) {
+        if (!SAFE.matcher(s).matches()) throw new IllegalArgumentException("Not safe for the TV's shell: " + s);
     }
 
     /** Installed third-party apps, one package per entry. */

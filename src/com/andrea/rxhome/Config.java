@@ -92,6 +92,20 @@ final class Config {
             + " · TV " + get(PHILIPS_IP) + ". Found again automatically if they move.";
     }
 
+    static final String JF_TOKEN = "jellyfin_token", JF_USER = "jellyfin_user", JF_DEVICE = "jellyfin_device";
+
+    /** Jellyfin for the RxFilms shortcuts; null until signed in (Quick Connect) in Settings. */
+    Jellyfin jellyfin() {
+        return get(JF_TOKEN).isEmpty() ? null : new Jellyfin(get(SERVER), get(JF_TOKEN), get(JF_USER), jellyfinDevice());
+    }
+
+    /** A stable id for this phone in Jellyfin's device list. */
+    String jellyfinDevice() {
+        String id = get(JF_DEVICE);
+        if (id.isEmpty()) put(JF_DEVICE, id = java.util.UUID.randomUUID().toString());
+        return id;
+    }
+
     /** The Philips TV's own API; null until paired in Settings. */
     Philips philips() {
         return get(PHILIPS_USER).isEmpty() ? null

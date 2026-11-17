@@ -235,7 +235,7 @@ public class MainActivity extends Activity {
         TextView remote = Ui.button(this, "REMOTE", false);
         remote.setOnClickListener(v -> startActivity(new Intent(this, RemoteActivity.class)));
         TextView apps = Ui.button(this, "APPS", false);
-        apps.setOnClickListener(v -> showApps(this, io, cfg.tv()));
+        apps.setOnClickListener(v -> startActivity(new Intent(this, TvAppsActivity.class)));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
         lp.rightMargin = Ui.dp(this, 8);
         buttons.addView(remote, lp);
@@ -271,45 +271,6 @@ public class MainActivity extends Activity {
 
     static String adbError(IOException e) {
         return e instanceof Adb.AdbAuthException ? "The TV's prompt wasn't accepted. Tap ↻ to show it again" : AWAY;
-    }
-
-    /** The FireStick's apps, known ones first by name; tap to open on the TV. */
-    static void showApps(Activity a, ExecutorService io, FireTv tv) {
-        Map<String, String> known = new LinkedHashMap<>();
-        known.put("org.rxfilms.tv", "RxFilms");
-        known.put("com.teamsmart.videomanager.tv", "SmartTube");
-        known.put("com.amazon.firetv.youtube", "YouTube");
-        known.put("com.netflix.ninja", "Netflix");
-        known.put("com.amazon.avod", "Prime Video");
-        known.put("com.disney.disneyplus", "Disney+");
-        known.put("com.spotify.tv.android", "Spotify");
-        io.execute(() -> {
-            try {
-                List<String> installed = Arrays.asList(tv.apps());
-                List<String> pkgs = new ArrayList<>(), names = new ArrayList<>();
-                for (Map.Entry<String, String> k : known.entrySet()) {
-                    if (installed.contains(k.getKey())) { pkgs.add(k.getKey()); names.add(k.getValue()); }
-                }
-                for (String p : installed) {
-                    if (!known.containsKey(p) && !p.isEmpty()) { pkgs.add(p); names.add(p); }
-                }
-                a.runOnUiThread(() -> {
-                    if (a.isFinishing()) return;
-                    new AlertDialog.Builder(a, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                        .setTitle("Open on the TV")
-                        .setItems(names.toArray(new String[0]), (d, i) -> io.execute(() -> {
-                            try {
-                                tv.launch(pkgs.get(i));
-                            } catch (IOException e) {
-                                a.runOnUiThread(() -> Toast.makeText(a, adbError(e), Toast.LENGTH_LONG).show());
-                            }
-                        }))
-                        .show();
-                });
-            } catch (IOException e) {
-                a.runOnUiThread(() -> Toast.makeText(a, adbError(e), Toast.LENGTH_LONG).show());
-            }
-        });
     }
 
     // --- lights ---

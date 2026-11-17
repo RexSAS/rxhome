@@ -74,7 +74,7 @@ public class RemoteActivity extends Activity {
         // Home, back and play/pause are gestures on the pad; the rest sit along the bottom edge
         // (BACK too, as a backup if a gesture is misread).
         TextView apps = small(Ui.button(this, "APPS", false));
-        apps.setOnClickListener(v -> MainActivity.showApps(this, io, tv));
+        apps.setOnClickListener(v -> startActivity(new android.content.Intent(this, TvAppsActivity.class)));
         col.addView(row(small(key("BACK", 4)), small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
             small(tvButton("MUTE", "Mute")), apps));
 

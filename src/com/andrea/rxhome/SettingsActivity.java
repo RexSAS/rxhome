@@ -59,6 +59,14 @@ public class SettingsActivity extends Activity {
         pairTv.setOnClickListener(this::pairTv);
         col.addView(pairTv);
 
+        section(col, "Jellyfin (RxFilms shortcuts)");
+        col.addView(Ui.text(this, "For Continue watching / Next up in Apps: sign in once with Quick Connect.", 13, Ui.DIM, false));
+        TextView jf = Ui.button(this, cfg.get(Config.JF_TOKEN).isEmpty() ? "SIGN IN TO JELLYFIN" : "SIGNED IN · SIGN IN AGAIN", false);
+        jf.setOnClickListener(this::signInJellyfin);
+        LinearLayout.LayoutParams jfLp = new LinearLayout.LayoutParams(-1, -2);
+        jfLp.topMargin = Ui.dp(this, 8);
+        col.addView(jf, jfLp);
+
         section(col, "Tapo lights");
         field(col, Config.TAPO_EMAIL, "Tapo account email", InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, false);
         field(col, Config.TAPO_PASSWORD, "Tapo account password", 0, true);
@@ -163,6 +171,57 @@ public class SettingsActivity extends Activity {
             }))
             .setNegativeButton("Cancel", null)
             .show();
+    }
+
+    private volatile boolean signingIn;
+
+    /** Quick Connect: shows a code to approve in a signed-in Jellyfin app, waits up to 5 minutes. */
+    private void signInJellyfin(View v) {
+        String server = cfg.get(Config.SERVER), device = cfg.jellyfinDevice();
+        io.execute(() -> {
+            Jellyfin.Start start;
+            try {
+                start = Jellyfin.initiate(server, device);
+            } catch (IOException e) {
+                runOnUiThread(() -> Toast.makeText(this, "Can't reach Jellyfin: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                return;
+            }
+            signingIn = true;
+            AlertDialog[] dialog = new AlertDialog[1];
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                TextView code = Ui.text(this, start.code, 40, Ui.RED, true);
+                code.setGravity(android.view.Gravity.CENTER);
+                code.setLetterSpacing(0.2f);
+                code.setPadding(0, Ui.dp(this, 16), 0, Ui.dp(this, 16));
+                dialog[0] = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Approve this code in Jellyfin")
+                    .setMessage("In RxFilms or the Jellyfin app: Settings → Quick Connect")
+                    .setView(code)
+                    .setNegativeButton("Cancel", (d, w) -> signingIn = false)
+                    .setOnDismissListener(d -> signingIn = false)
+                    .show();
+            });
+            for (int i = 0; i < 100 && signingIn; i++) {
+                try {
+                    Thread.sleep(3000);
+                    Jellyfin.Login login = Jellyfin.check(server, device, start.secret);
+                    if (login != null) {
+                        cfg.put(Config.JF_TOKEN, login.token);
+                        cfg.put(Config.JF_USER, login.userId);
+                        runOnUiThread(() -> {
+                            if (dialog[0] != null) dialog[0].dismiss();
+                            Toast.makeText(this, "Signed in to Jellyfin", Toast.LENGTH_LONG).show();
+                        });
+                        return;
+                    }
+                } catch (InterruptedException e) {
+                    return;
+                } catch (IOException e) {
+                    // Server blip: keep waiting.
+                }
+            }
+        });
     }
 
     private void pickBot(View v) {
