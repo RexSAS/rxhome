@@ -46,16 +46,18 @@ public class GesturesTest {
         t.up(160);
         expect("press 19", "press 19", "press 19");
 
-        // Swipe down then keep the finger still: keeps moving (a press every 110 ms) until lifted.
+        // Swipe down then keep the finger still: keeps moving (a press every 110 ms) until lifted,
+        // but only after a deliberate 650 ms pause, so a finger resting after a swipe doesn't run on.
         t = g();
         t.down(500, 100, 0);
         t.move(500, 220, 50);
-        t.tick(300);
-        t.tick(460);  // 410 ms after the swipe: holding starts
-        t.tick(580);
-        t.tick(700);
-        t.up(720);
+        t.tick(500);  // 450 ms after the swipe: still just the one step
+        t.tick(710);  // 660 ms: holding starts
+        t.tick(830);
+        t.tick(950);
+        t.up(970);
         expect("press 20", "press 20", "press 20", "press 20");
+        assert Gestures.KEEP_MOVING_AFTER_MS == 650;
 
         // Press and hold without moving: a long-press OK (down, repeats, up), like the real remote.
         t = g();

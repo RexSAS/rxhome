@@ -39,7 +39,7 @@ final class TouchpadView extends View {
 
     TouchpadView(Context c, Gestures.Out keys) {
         super(c);
-        gestures = new Gestures(Ui.dp(c, 48), new Gestures.Out() {
+        gestures = new Gestures(Ui.dp(c, 80), new Gestures.Out() {
             @Override public void press(int code) { feel(code, HapticFeedbackConstants.VIRTUAL_KEY); keys.press(code); }
             @Override public void down(int code) { feel(code, HapticFeedbackConstants.LONG_PRESS); keys.down(code); }
             @Override public void repeat(int code, int n) { keys.repeat(code, n); }

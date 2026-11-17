@@ -16,7 +16,7 @@ final class Gestures {
     }
 
     static final int UP = 19, DOWN = 20, LEFT = 21, RIGHT = 22, OK = 23;
-    static final long LONG_PRESS_MS = 500, KEEP_MOVING_AFTER_MS = 400, MOVE_EVERY_MS = 110, OK_REPEAT_MS = 90;
+    static final long LONG_PRESS_MS = 500, KEEP_MOVING_AFTER_MS = 650, MOVE_EVERY_MS = 110, OK_REPEAT_MS = 90;
 
     private final float step;
     private final Out out;
