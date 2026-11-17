@@ -77,8 +77,15 @@ final class Metrics {
         if (b.memTotal > 0 && b.memAvailable >= 0) {
             parts.add(String.format(Locale.ROOT, "RAM %.1f/%.1f GB", b.ramUsedGb(), b.ramTotalGb()));
         }
-        if (b.boot > 0 && b.now > b.boot) parts.add("up " + b.uptimeDays() + "d");
+        if (b.boot > 0 && b.now > b.boot) parts.add("up " + uptime(b.now - b.boot));
         return String.join(" · ", parts);
+    }
+
+    /** "45m", "5h" or "6d", whole units rounded down. */
+    static String uptime(double seconds) {
+        if (seconds < 3600) return (long) (seconds / 60) + "m";
+        if (seconds < 86400) return (long) (seconds / 3600) + "h";
+        return (long) (seconds / 86400) + "d";
     }
 
     /** Two samples 0.7 s apart (CPU % needs a difference); null if the exporter can't be reached. */

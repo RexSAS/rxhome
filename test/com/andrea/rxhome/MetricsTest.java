@@ -28,10 +28,23 @@ public class MetricsTest {
         assert s1.uptimeDays() == 6 : s1.uptimeDays();
         assert Metrics.line(s0, s1).equals("CPU 10% · 44°C · RAM 3.3/8.3 GB · up 6d") : Metrics.line(s0, s1);
 
+        // Uptime reads naturally at any length.
+        assert Metrics.uptime(45 * 60).equals("45m") : Metrics.uptime(45 * 60);
+        assert Metrics.uptime(5 * 3600 + 59 * 60).equals("5h");
+        assert Metrics.uptime(6 * 86400 + 20 * 3600).equals("6d");
+
         // Missing pieces are left out rather than shown as zero.
         Metrics.Sample bare = Metrics.parse("node_memory_MemTotal_bytes 8e9\nnode_memory_MemAvailable_bytes 4e9\n");
         assert Metrics.line(bare, bare).equals("RAM 4.0/8.0 GB") : Metrics.line(bare, bare);
         assert Metrics.line(Metrics.parse(""), Metrics.parse("")).isEmpty();
+
+        // Live (RXHOME_METRICS=http://192.168.1.166:9100/metrics): the full line from the real server.
+        String live = System.getenv("RXHOME_METRICS");
+        if (live != null) {
+            String l = Metrics.fetch(live);
+            System.out.println("  live: " + l);
+            assert l != null && l.matches("CPU \\d+% · \\d+°C · RAM [\\d.]+/[\\d.]+ GB · up \\d+[mhd]") : l;
+        }
 
         // No exporter on that port: null, quickly.
         long t0 = System.currentTimeMillis();
