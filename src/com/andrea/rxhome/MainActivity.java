@@ -543,7 +543,7 @@ public class MainActivity extends Activity {
         main.postDelayed(() -> {
             if (isDestroyed() || vpnActive()) return;
             System.err.println("rxhome-vpn: no VPN 6 s after asking");
-            vpnNote = "WireGuard didn't start: in the WireGuard app, Settings → turn on \"Allow remote control apps\"";
+            vpnNote = "WireGuard didn't start: set its battery use to Unrestricted (Settings → Apps → WireGuard → Battery) and turn on \"Allow remote control apps\" in WireGuard";
             showServer(State.UNREACHABLE, false);
         }, 6000);
     }
