@@ -498,12 +498,14 @@ public class MainActivity extends Activity {
             TextView b = Ui.button(this, scene.name, i == 0);
             b.setMinHeight(Ui.dp(this, 64));
             b.setOnClickListener(v -> runScene(b, scene));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -1, 1);
+            // Own height (min 64 dp), not the row's: an odd last row holds only this and an empty
+            // filler, and "as tall as the row" collapsed it to the filler's height.
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
             if (i % 2 == 0) lp.rightMargin = Ui.dp(this, 8);
             row.addView(b, lp);
         }
         // Keep an odd last scene half-width, like the others.
-        if (list.size() % 2 == 1) row.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        if (list.size() % 2 == 1) row.addView(new View(this), new LinearLayout.LayoutParams(0, 0, 1));
         return col;
     }
 
