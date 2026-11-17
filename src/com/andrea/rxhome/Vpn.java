@@ -14,7 +14,7 @@ final class Vpn {
     static final long RETRY_MS = 60_000;
     static final String ACTION_DOWN = "com.wireguard.android.action.SET_TUNNEL_DOWN";
     static final String JELLYFIN = "org.jellyfin.mobile";
-    static final long GRACE_MS = 20_000;
+    static final long GRACE_MS = 10_000;
 
     private Vpn() {}
 

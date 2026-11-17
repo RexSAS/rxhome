@@ -16,13 +16,13 @@ import android.os.Process;
 import android.os.SystemClock;
 
 /**
- * Runs while a WireGuard tunnel rxhome switched on is up: every 5 s it looks at which app is in front
+ * Runs while a WireGuard tunnel rxhome switched on is up: every 2 s it looks at which app is in front
  * (Android's usage events, needs "Usage access") and switches the tunnel off once neither rxhome nor
  * Jellyfin has been in front, screen on, for Vpn.GRACE_MS.
  */
 public class TunnelWatch extends Service {
 
-    private static final long EVERY_MS = 5000;
+    private static final long EVERY_MS = 2000;
     private final Handler main = new Handler(Looper.getMainLooper());
     private long lastSeenOurs;
 
