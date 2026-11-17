@@ -26,6 +26,13 @@ public class FireTvTest {
         if (host != null && priv.exists()) {
             FireTv tv = new FireTv(new Adb(host, 5555, AdbTest.pem(priv)));
             assert tv.state() != State.UNREACHABLE;
+            // Key not accepted yet: the screen needs the reason, not just "grey".
+            try {
+                new FireTv(new Adb(host, 5555, Adb.generateKey())).checkedState();
+                throw new AssertionError("unknown key accepted");
+            } catch (Adb.AdbAuthException expected) {
+                // ok
+            }
         }
         FireTv away = new FireTv(new Adb("192.168.1.250", 5555, Adb.generateKey()));
         t0 = System.currentTimeMillis();

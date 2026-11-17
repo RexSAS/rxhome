@@ -26,10 +26,15 @@ class FireTv {
 
     State state() {
         try {
-            return parseAwake(adb.shell("dumpsys power | grep mWakefulness=", 1500));
+            return checkedState();
         } catch (IOException e) {
             return State.UNREACHABLE;
         }
+    }
+
+    /** Like state(), but says why: Adb.AdbAuthException means the TV hasn't accepted our key yet. */
+    State checkedState() throws IOException {
+        return parseAwake(adb.shell("dumpsys power | grep mWakefulness=", 1500));
     }
 
     void key(int code) throws IOException {
