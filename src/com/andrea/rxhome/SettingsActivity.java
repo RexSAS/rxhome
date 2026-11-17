@@ -57,7 +57,7 @@ public class SettingsActivity extends Activity {
         section(col, "Tapo lights");
         field(col, Config.TAPO_EMAIL, "Tapo account email", InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, false);
         field(col, Config.TAPO_PASSWORD, "Tapo account password", 0, true);
-        EditText lights = field(col, Config.LIGHTS, "Found automatically on the Wi-Fi. One per line, Name=IP: rename freely, the app keeps your names", InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
+        EditText lights = field(col, Config.LIGHTS, "Found automatically on the Wi-Fi. One per line, Name=IP: rename freely, the app keeps your names. Put # before a name to hide that light", InputType.TYPE_TEXT_FLAG_MULTI_LINE, false);
         lights.setMinLines(3);
 
         section(col, "Scenes");

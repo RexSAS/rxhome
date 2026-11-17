@@ -78,27 +78,51 @@ final class TapoDiscovery {
      * follows a light whose IP changed, swaps a placeholder for the real name, keeps names the user typed.
      */
     static String merge(String lightsText, Map<String, String> found) {
-        Map<String, String> lights = Scenes.lights(lightsText); // name → IP, in order
+        // Each row: {prefix, name, ip}; prefix is "" or the "#" (plus spaces) that hides a light.
+        List<String[]> rows = new ArrayList<>();
+        for (String line : lightsText.split("\n")) {
+            String t = line.trim();
+            int eq = t.indexOf('=');
+            if (eq <= 0 || t.substring(eq + 1).trim().isEmpty()) continue;
+            String name = t.substring(0, eq);
+            int i = 0;
+            if (name.startsWith("#")) {
+                i = 1;
+                while (i < name.length() && name.charAt(i) == ' ') i++;
+            }
+            rows.add(new String[] {name.substring(0, i), name.substring(i).trim(), t.substring(eq + 1).trim()});
+        }
         for (Map.Entry<String, String> f : found.entrySet()) {
             String ip = f.getKey(), name = f.getValue();
-            String atIp = null;
-            for (Map.Entry<String, String> e : lights.entrySet()) {
-                if (e.getValue().equals(ip)) atIp = e.getKey();
-            }
+            String[] atIp = row(rows, 2, ip);
             if (atIp != null) {
-                if (!isPlaceholder(atIp) || isPlaceholder(name) || atIp.equals(name)) continue;
-                lights.remove(atIp);
-                lights.put(name, ip); // updates in place if the name already exists at an old IP
-            } else {
-                lights.put(name, ip); // new light, or a known one that moved
+                if (!isPlaceholder(atIp[1]) || isPlaceholder(name) || atIp[1].equals(name)) continue;
+                String[] named = row(rows, 1, name);
+                if (named != null) {
+                    named[2] = ip; // the real name was already listed at an old IP
+                    rows.remove(atIp);
+                } else {
+                    atIp[1] = name;
+                }
+                continue;
             }
+            String[] named = row(rows, 1, name);
+            if (named != null) named[2] = ip; // a known light (hidden or not) that moved
+            else rows.add(new String[] {"", name, ip});
         }
         StringBuilder s = new StringBuilder();
-        for (Map.Entry<String, String> e : lights.entrySet()) {
+        for (String[] r : rows) {
             if (s.length() > 0) s.append('\n');
-            s.append(e.getKey()).append('=').append(e.getValue());
+            s.append(r[0]).append(r[1]).append('=').append(r[2]);
         }
         return s.toString();
+    }
+
+    private static String[] row(List<String[]> rows, int field, String value) {
+        for (String[] r : rows) {
+            if (r[field].equals(value)) return r;
+        }
+        return null;
     }
 
     static boolean isPlaceholder(String name) {

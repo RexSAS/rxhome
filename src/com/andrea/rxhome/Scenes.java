@@ -52,10 +52,11 @@ final class Scenes {
         return out;
     }
 
-    /** The lights setting: one "Name=IP" per line; lines without "=" are ignored. */
+    /** The lights setting: one "Name=IP" per line; lines without "=" or starting with "#" are ignored. */
     static Map<String, String> lights(String text) {
         Map<String, String> out = new LinkedHashMap<>();
         for (String line : text.split("\n")) {
+            if (line.trim().startsWith("#")) continue;
             int eq = line.indexOf('=');
             if (eq > 0 && !line.substring(eq + 1).trim().isEmpty()) {
                 out.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());

@@ -37,6 +37,19 @@ public class TapoDiscoveryTest {
         assert TapoDiscovery.merge(before, found).equals("Desk strip=192.168.1.10\nMy name=192.168.1.13")
             : TapoDiscovery.merge(before, found);
 
+        // "#" in front of a name switches that light off in rxhome: not shown, not re-added by discovery,
+        // and it still follows a new IP so un-commenting later works.
+        assert Scenes.lights("#Desk strip=192.168.1.10\nBed strip=192.168.1.13").keySet().toString().equals("[Bed strip]");
+        found.clear();
+        found.put("192.168.1.10", "Desk strip");
+        assert TapoDiscovery.merge("#Desk strip=192.168.1.10", found).equals("#Desk strip=192.168.1.10")
+            : TapoDiscovery.merge("#Desk strip=192.168.1.10", found);
+        assert TapoDiscovery.merge("# Desk strip=192.168.1.99", found).equals("# Desk strip=192.168.1.10")
+            : TapoDiscovery.merge("# Desk strip=192.168.1.99", found);
+        found.put("192.168.1.13", "L900 .13");
+        assert TapoDiscovery.merge("#L900 .13=192.168.1.13\nDesk strip=192.168.1.10", found)
+            .equals("#L900 .13=192.168.1.13\nDesk strip=192.168.1.10");
+
         // Live (RXHOME_TAPO_DISCOVER set): the real strips answer the broadcast.
         if (System.getenv("RXHOME_TAPO_DISCOVER") != null) {
             List<TapoDiscovery.Found> live = TapoDiscovery.discover(1500);

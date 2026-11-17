@@ -32,7 +32,7 @@ Open ⚙ Settings:
    For the CPU / temperature / RAM line, install node_exporter on rexserver once: `sudo apt install prometheus-node-exporter` (serves `:9100/metrics` on the LAN; the line is hidden when it can't be reached).
 2. **SwitchBot**: in the SwitchBot app, Profile → Preferences → tap *App Version* 10 times → Developer Options shows the token and secret. Paste both, then *Pick the Bot* and choose the one on the server's button.
 3. **TV**: the FireStick's IP (default `192.168.1.49`). The first time, the TV shows "Allow USB debugging?" for *rxhome*: tick *Always allow* and accept.
-4. **Tapo**: your Tapo account email and password. Lights and plugs are found on the Wi-Fi automatically (UDP broadcast, port 20002) and named as in the Tapo app; the list in Settings (`Name=IP`) can be renamed and follows lights whose IP changes.
+4. **Tapo**: your Tapo account email and password. Lights and plugs are found on the Wi-Fi automatically (UDP broadcast, port 20002) and named as in the Tapo app; the list in Settings (`Name=IP`) can be renamed and follows lights whose IP changes. Put `#` before a name (`#Desk strip=…`) to hide that light from rxhome and its scenes; discovery won't add it back.
    Lights on 2025 firmware (TPAP login, e.g. the L900-5 strips) only accept rxhome's local login with **Third-Party Compatibility** on: Tapo app → Me → Third-Party Services → Third-Party Compatibility. Until then they show as "L900 .10" and stay grey; tap one to see why.
 5. **Scenes**: one per line, `Name: step; step; …`. Steps: `light <name|all> on|off [0-100] [warm|cool]`, `tv on|off`, `tv app <package>`, `tv music` (Claude FM in SmartTube), `server press`, `wait <seconds>`. Names with spaces go in quotes: `light "LED strip" on 100`.
 
