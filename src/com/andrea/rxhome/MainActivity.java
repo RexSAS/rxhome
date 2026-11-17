@@ -44,7 +44,7 @@ public class MainActivity extends Activity {
     private final Confirm serverConfirm = new Confirm();
     // This refresh's server and FireStick results: both unreachable = away → WireGuard (see Vpn).
     private State genServer, genStick;
-    private long vpnTriedAt;
+    private long vpnTriedAt, scannedAt;
     private final Map<String, LightRow> rows = new LinkedHashMap<>();
 
     @Override
@@ -456,7 +456,7 @@ public class MainActivity extends Activity {
                 if (gen != generation) return;
                 showServer(s, true);
                 genServer = s;
-                maybeVpn();
+                afterChecks();
             });
         });
         io.execute(() -> {
@@ -477,7 +477,7 @@ public class MainActivity extends Activity {
                     if (gen != generation) return;
                     showTv(s, true);
                     genStick = stick;
-                    maybeVpn();
+                    afterChecks();
                 });
             } catch (IOException e) {
                 // A key prompt means the stick answered: we're home.
@@ -487,7 +487,7 @@ public class MainActivity extends Activity {
                     showTv(State.UNREACHABLE, true);
                     tvStatus.setText(adbError(e));
                     genStick = stick;
-                    maybeVpn();
+                    afterChecks();
                 });
             }
         });
@@ -495,11 +495,34 @@ public class MainActivity extends Activity {
         io.execute(this::findLights);
     }
 
-    /** Away from home (server and FireStick both silent): switch on the "rxfilms" WireGuard tunnel. */
-    private void maybeVpn() {
+    /**
+     * Both home checks are in. Something silent while on Wi-Fi: maybe it moved, so scan for it (at most
+     * once a minute) and refresh if found. Nothing new: maybe we're away, so WireGuard (maybeVpn).
+     */
+    private void afterChecks() {
         if (genServer == null || genStick == null) return;
         long now = android.os.SystemClock.elapsedRealtime();
-        if (!Vpn.shouldStart(genServer, genStick, now, vpnTriedAt)) return;
+        boolean missing = genServer == State.UNREACHABLE || genStick == State.UNREACHABLE;
+        if (missing && now - scannedAt > 60_000) {
+            scannedAt = now;
+            State server = genServer, stick = genStick;
+            io.execute(() -> {
+                String me = Discovery.wifiIp();
+                if (me != null && cfg.found(Discovery.find(me, cfg.adbKey()))) {
+                    ui(this::refresh);
+                } else {
+                    ui(() -> maybeVpn(server, stick));
+                }
+            });
+            return;
+        }
+        maybeVpn(genServer, genStick);
+    }
+
+    /** Away from home (server and FireStick both silent): switch on the "rxfilms" WireGuard tunnel. */
+    private void maybeVpn(State server, State stick) {
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (!Vpn.shouldStart(server, stick, now, vpnTriedAt)) return;
         vpnTriedAt = now;
         if (checkSelfPermission(Vpn.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Vpn.PERMISSION}, 1);

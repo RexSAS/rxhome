@@ -73,6 +73,25 @@ final class Config {
         }
     }
 
+    /** Saves what a Wi-Fi scan found (null = not found, keep the old one); true if anything moved. */
+    boolean found(Discovery.Found f) {
+        boolean changed = false;
+        String[][] pairs = {{SERVER, f.server}, {FIRETV, f.stick}, {PHILIPS_IP, f.tv}};
+        for (String[] p : pairs) {
+            if (p[1] != null && !p[1].equals(get(p[0]))) {
+                put(p[0], p[1]);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /** For Settings: where things were found. */
+    String foundLine() {
+        return "Found on this Wi-Fi: server " + get(SERVER).replace("http://", "") + " · FireStick " + get(FIRETV)
+            + " · TV " + get(PHILIPS_IP) + ". Found again automatically if they move.";
+    }
+
     /** The Philips TV's own API; null until paired in Settings. */
     Philips philips() {
         return get(PHILIPS_USER).isEmpty() ? null
@@ -93,7 +112,7 @@ final class Config {
     }
 
     /** The phone's ADB key, made once and kept; the TV asks to accept it on first connect. */
-    private KeyPair adbKey() {
+    KeyPair adbKey() {
         String priv = prefs.getString("adb_priv", null), pub = prefs.getString("adb_pub", null);
         if (priv != null && pub != null) {
             try {

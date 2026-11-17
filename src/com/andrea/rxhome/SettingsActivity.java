@@ -40,7 +40,6 @@ public class SettingsActivity extends Activity {
         col.addView(Ui.text(this, "Settings", 26, Ui.TEXT, true));
 
         section(col, "Server");
-        field(col, Config.SERVER, "Jellyfin on the LAN (shows if the server is up)", InputType.TYPE_TEXT_VARIATION_URI, false);
         field(col, Config.SERVER_PUBLIC, "Jellyfin public address, tried when the LAN one doesn't answer", InputType.TYPE_TEXT_VARIATION_URI, false);
 
         section(col, "SwitchBot (server power button)");
@@ -52,11 +51,10 @@ public class SettingsActivity extends Activity {
         col.addView(pick);
 
         section(col, "TV");
-        field(col, Config.FIRETV, "FireStick IP address (ADB debugging on)", InputType.TYPE_CLASS_PHONE, false);
-        field(col, Config.PHILIPS_IP, "Philips TV IP address (for its volume and power; the TV must be on to pair)",
-            InputType.TYPE_CLASS_PHONE, false);
-        field(col, Config.PHILIPS_MAC, "Philips TV MAC address (switches it on from standby: enable \"Switch on with Wi-Fi\" on the TV)",
-            0, false);
+        TextView found = Ui.text(this, cfg.foundLine(), 13, Ui.DIM, false);
+        found.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 8));
+        col.addView(found);
+        col.addView(Ui.text(this, "Philips TV: pair once (with the TV on) for its volume, mute and power.", 13, Ui.DIM, false));
         TextView pairTv = Ui.button(this,cfg.get(Config.PHILIPS_USER).isEmpty() ? "PAIR WITH THE TV" : "PAIR WITH THE TV AGAIN", false);
         pairTv.setOnClickListener(this::pairTv);
         col.addView(pairTv);
@@ -119,9 +117,13 @@ public class SettingsActivity extends Activity {
 
     /** The TV shows a PIN; typing it here gives rxhome a login for the TV's own API. */
     private void pairTv(View v) {
-        String ip = fields.get(Config.PHILIPS_IP).getText().toString().trim();
         io.execute(() -> {
             try {
+                if (!Discovery.isPhilips(cfg.get(Config.PHILIPS_IP))) { // moved, or never found: look for it
+                    String me = Discovery.wifiIp();
+                    if (me != null) cfg.found(Discovery.find(me, cfg.adbKey()));
+                }
+                String ip = cfg.get(Config.PHILIPS_IP);
                 Philips.Pairing p = Philips.pairRequest(ip);
                 runOnUiThread(() -> askPin(ip, p));
             } catch (IOException e) {

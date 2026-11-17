@@ -40,6 +40,8 @@ class Adb {
     volatile int authWaitMs = 60000;
     /** Called (on the calling thread) when the TV starts showing the prompt. */
     volatile Runnable onKeyPrompt;
+    /** False: never offer our key (no prompt on the device); an untrusted key fails at once. */
+    volatile boolean offerKey = true;
     private Socket socket;
     private DataInputStream in;
     private OutputStream out;
@@ -178,6 +180,7 @@ class Adb {
                 send(AUTH, 2, 0, sign(m.data));
                 signed = true;
             } else {
+                if (!offerKey) throw new AdbAuthException("This device doesn't trust rxhome's key");
                 // Our signature was refused: offer the public key; the TV shows a prompt.
                 send(AUTH, 3, 0, (publicKeyString((RSAPublicKey) key.getPublic(), "rxhome") + "\0")
                     .getBytes(StandardCharsets.UTF_8));

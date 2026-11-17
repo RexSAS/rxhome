@@ -28,16 +28,16 @@ Remote keys go through a tiny helper (`tv/…/Keys.java`, built by `keys.sh` and
 
 Open ⚙ Settings:
 
-1. **Server**: the Jellyfin LAN address (default `http://192.168.1.166:8096`) and public address (default `https://rxfilms.rxsas.it`).
-   For the CPU / temperature / RAM line, install node_exporter on rexserver once: `sudo apt install prometheus-node-exporter` (serves `:9100/metrics` on the LAN; the line is hidden when it can't be reached).
+1. **Nothing to type for addresses.** The server (Jellyfin, port 8096), the FireStick (ADB, 5555) and the Philips (JointSPACE, 1925) are found by scanning the Wi-Fi, and found again if they move. The FireStick only counts if it already trusts rxhome's key (the scan never offers it, so no other device gets a prompt). Settings shows what was found.
+   **Away from home:** when neither the server nor the FireStick answers, rxhome switches on the WireGuard tunnel named `rxfilms` (WireGuard app → Settings → *Allow remote control apps* must be on; rxhome asks once for permission to control WireGuard). The public address `rxfilms.rxsas.it` is still tried too, but Cloudflare's allowlist blocks it before it reaches the server, so from mobile data it can't tell on from off.
+   For the CPU / temperature / RAM line, install node_exporter on rexserver once: `sudo apt install prometheus-node-exporter`.
 2. **SwitchBot**: in the SwitchBot app, Profile → Preferences → tap *App Version* 10 times → Developer Options shows the token and secret. Paste both, then *Pick the Bot* and choose the one on the server's button.
-3. **TV**: the FireStick's IP (default `192.168.1.49`). The first time, the TV shows "Allow USB debugging?" for *rxhome*: tick *Always allow* and accept.
-   **Philips TV** (volume, mute, real power): with the TV on, tap *Pair with the TV* and type the PIN it shows (its own JointSPACE API, as pylips does it). To switch it on from standby, enable *Switch on with Wi-Fi (WoWLAN)* in the TV's network settings; rxhome sends Wake-on-LAN to the MAC it reads at pairing.
+3. **TV**: the first time, the TV shows "Allow USB debugging?" for *rxhome*: tick *Always allow* and accept.
+   **Philips TV** (volume, mute, power): with the TV on, tap *Pair with the TV* and type the PIN it shows. Power state comes from what the TV announces over HDMI-CEC (its API answers the same on and in standby); on = `PowerOn` key (plus Wake-on-LAN), off = `Standby` key.
 4. **Tapo**: your Tapo account email and password. Lights and plugs are found on the Wi-Fi automatically (UDP broadcast, port 20002) and named as in the Tapo app; the list in Settings (`Name=IP`) can be renamed and follows lights whose IP changes. Put `#` before a name (`#Desk strip=…`) to hide that light from rxhome and its scenes; discovery won't add it back.
    Lights on 2025 firmware (TPAP login, e.g. the L900-5 strips) only accept rxhome's local login with **Third-Party Compatibility** on: Tapo app → Me → Third-Party Services → Third-Party Compatibility. Until then they show as "L900 .10" and stay grey; tap one to see why.
 5. **Scenes**: one per line, `Name: step; step; …`. Steps: `light <name|all> on|off [0-100] [warm|cool]`, `tv on|off`, `tv app <package>`, `tv music` (Claude FM in SmartTube), `server press`, `wait <seconds>`. Names with spaces go in quotes: `light "LED strip" on 100`.
 
-IPs can change: if your Poste Italiane router lets you reserve addresses (static DHCP), reserve the FireStick's and the lights'; otherwise update them in Settings when they move.
 
 ## Known limits
 
