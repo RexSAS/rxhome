@@ -39,7 +39,7 @@ public class MainActivity extends Activity {
     private Config cfg;
     private int generation;
 
-    private TextView serverStatus, serverStats, tvStatus;
+    private TextView serverStatus, serverStats, tvStatus, openJellyfin;
     private LinearLayout tvTile;
     private final Confirm serverConfirm = new Confirm();
     // This refresh's server and FireStick results: both unreachable = away → WireGuard (see Vpn).
@@ -134,6 +134,15 @@ public class MainActivity extends Activity {
         power.setOnClickListener(this::serverPower);
         row.addView(power);
         tile.addView(row);
+        // Shown when the server answers and the Jellyfin app is on the phone.
+        openJellyfin = Ui.button(this, "OPEN JELLYFIN", false);
+        openJellyfin.setOnClickListener(v -> {
+            Intent jf = getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN);
+            if (jf != null) startActivity(jf);
+        });
+        LinearLayout.LayoutParams jfLp = new LinearLayout.LayoutParams(-1, -2);
+        jfLp.topMargin = Ui.dp(this, 12);
+        tile.addView(openJellyfin, jfLp);
         showServer(State.valueOf(cfg.prefs.getString("last_server", State.UNREACHABLE.name())), false);
         return tile;
     }
@@ -141,6 +150,8 @@ public class MainActivity extends Activity {
     private void showServer(State s, boolean fresh) {
         if (fresh) cfg.prefs.edit().putString("last_server", s.name()).apply();
         if (s == State.ON) vpnNote = null;
+        openJellyfin.setVisibility(s == State.ON && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
+            ? View.VISIBLE : View.GONE);
         serverStatus.setText(s == State.ON ? "● ONLINE"
             : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
         serverStatus.setTextColor(s == State.ON ? Ui.RED : Ui.DIM);
@@ -534,6 +545,8 @@ public class MainActivity extends Activity {
         // Needs "Allow remote control apps" on in WireGuard's settings, or it's silently ignored.
         System.err.println("rxhome-vpn: asking WireGuard to bring up " + Vpn.TUNNEL);
         sendBroadcast(new Intent(Vpn.ACTION_UP).setPackage(Vpn.PACKAGE).putExtra("tunnel", Vpn.TUNNEL));
+        // Switches it off again once neither rxhome nor Jellyfin is in front (see TunnelWatch).
+        startForegroundService(new Intent(this, TunnelWatch.class));
         vpnNote = "Away from home: connecting WireGuard (" + Vpn.TUNNEL + ")…";
         showServer(State.UNREACHABLE, false);
         // The handshake home can take ~20 s: keep checking every 3 s for 30 s, until the server answers.

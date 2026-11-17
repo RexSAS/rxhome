@@ -12,8 +12,21 @@ final class Vpn {
     static final String PACKAGE = "com.wireguard.android";
     static final String PERMISSION = "com.wireguard.android.permission.CONTROL_TUNNELS";
     static final long RETRY_MS = 60_000;
+    static final String ACTION_DOWN = "com.wireguard.android.action.SET_TUNNEL_DOWN";
+    static final String JELLYFIN = "org.jellyfin.mobile";
+    static final long GRACE_MS = 20_000;
 
     private Vpn() {}
+
+    /** The apps the tunnel is for: while one of them is in front, it stays up. */
+    static boolean ours(String pkg) {
+        return "com.andrea.rxhome".equals(pkg) || JELLYFIN.equals(pkg);
+    }
+
+    /** Off after GRACE_MS without rxhome or Jellyfin in front, so a quick hop elsewhere doesn't drop it. */
+    static boolean shouldStop(long lastSeenOurs, long now) {
+        return now - lastSeenOurs > GRACE_MS;
+    }
 
     static boolean shouldStart(State server, State stick, long now, long lastTry) {
         return server == State.UNREACHABLE && stick == State.UNREACHABLE && now - lastTry >= RETRY_MS;

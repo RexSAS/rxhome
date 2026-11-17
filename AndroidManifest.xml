@@ -9,6 +9,14 @@
     <uses-permission android:name="com.wireguard.android.permission.CONTROL_TUNNELS" />
     <!-- Knowing whether the WireGuard VPN actually came up. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- TunnelWatch: knows which app is in front, to switch the tunnel off when rxhome and Jellyfin are left. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+
+    <!-- Android 11+ only shows apps declared here: the "Open Jellyfin" button. -->
+    <queries>
+        <package android:name="org.jellyfin.mobile" />
+    </queries>
 
     <!-- Cleartext: Jellyfin and Tapo are plain HTTP on the LAN. No backup: settings hold secrets. -->
     <application
@@ -26,6 +34,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name=".TunnelWatch" android:exported="false" />
         <activity android:name=".RemoteActivity" android:exported="false"
             android:screenOrientation="portrait" />
         <activity android:name=".SettingsActivity" android:exported="false"

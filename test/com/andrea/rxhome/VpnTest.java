@@ -14,5 +14,14 @@ public class VpnTest {
         assert !Vpn.shouldStart(State.UNREACHABLE, State.UNREACHABLE, now, now - 30_000);
         assert Vpn.shouldStart(State.UNREACHABLE, State.UNREACHABLE, now, now - 61_000);
         assert Vpn.TUNNEL.equals("rxfilms");
+
+        // Auto-off: the tunnel stays while rxhome or Jellyfin is in front (screen on).
+        assert Vpn.ours("com.andrea.rxhome") && Vpn.ours("org.jellyfin.mobile");
+        assert !Vpn.ours("com.whatsapp") && !Vpn.ours(null);
+        // ...and goes after 20 s without either, so a quick hop to another app doesn't drop it.
+        assert !Vpn.shouldStop(now - 5_000, now);
+        assert !Vpn.shouldStop(now - 19_000, now);
+        assert Vpn.shouldStop(now - 21_000, now);
+        assert Vpn.JELLYFIN.equals("org.jellyfin.mobile");
     }
 }
