@@ -359,68 +359,57 @@ public class MainActivity extends Activity {
             return android.graphics.Color.HSVToColor(new float[] {i.optInt("hue"), i.optInt("saturation") / 100f, 1f});
         }
 
-        /** Swatches, warm/cool white and a rainbow slider; each choice is sent at once. */
+        /** A colour wheel (drag: the light follows) and warm/cool white. */
         void pickColor() {
             LinearLayout box = new LinearLayout(MainActivity.this);
             box.setOrientation(LinearLayout.VERTICAL);
-            int p = Ui.dp(MainActivity.this, 20);
+            box.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            int p = Ui.dp(MainActivity.this, 16);
             box.setPadding(p, p / 2, p, 0);
-            android.widget.GridLayout grid = new android.widget.GridLayout(MainActivity.this);
-            grid.setColumnCount(5);
-            AlertDialog[] dialog = new AlertDialog[1];
-            int[][] hues = {{0, 100}, {25, 100}, {55, 100}, {120, 100}, {180, 100}, {215, 100}, {270, 100}, {300, 100}};
-            for (int[] h : hues) {
-                swatch(grid, android.graphics.Color.HSVToColor(new float[] {h[0], h[1] / 100f, 1f}), () -> {
-                    dialog[0].dismiss();
-                    send(() -> tapo.color(h[0], h[1]));
-                });
-            }
+
+            ColorWheelView wheel = new ColorWheelView(MainActivity.this);
+            if (info != null && info.optInt("color_temp", 0) == 0) wheel.setColor(info.optInt("hue"), info.optInt("saturation", 100));
+            java.util.concurrent.atomic.AtomicBoolean busy = new java.util.concurrent.atomic.AtomicBoolean();
+            long[] lastSent = {0};
+            wheel.listener = (h, sat, done) -> {
+                long now = android.os.SystemClock.uptimeMillis();
+                if (done) {
+                    send(() -> tapo.color(h, sat)); // the final colour always goes, then the row refreshes
+                } else if (now - lastSent[0] > 250 && busy.compareAndSet(false, true)) {
+                    // While dragging: one change at a time, so slow lights don't queue up behind the finger.
+                    lastSent[0] = now;
+                    io.execute(() -> {
+                        try {
+                            tapo.color(h, sat);
+                        } catch (IOException e) {
+                            // The final colour on release still goes.
+                        } finally {
+                            busy.set(false);
+                        }
+                    });
+                }
+            };
+            box.addView(wheel);
+
             boolean temp = info != null && info.has("color_temp_range");
-            swatch(grid, 0xFFFFC98A, () -> { // warm white
-                dialog[0].dismiss();
-                send(() -> { if (temp) tapo.set(true, null, 2700); else tapo.color(30, 35); });
-            });
-            swatch(grid, 0xFFEAF2FF, () -> { // cool white
-                dialog[0].dismiss();
-                send(() -> { if (temp) tapo.set(true, null, 6500); else tapo.color(210, 8); });
-            });
-            box.addView(grid);
+            LinearLayout whitesRow = new LinearLayout(MainActivity.this);
+            TextView warm = Ui.button(MainActivity.this, "WARM WHITE", false);
+            warm.setOnClickListener(v -> send(() -> { if (temp) tapo.set(true, null, 2700); else tapo.color(30, 35); }));
+            TextView cool = Ui.button(MainActivity.this, "COOL WHITE", false);
+            cool.setOnClickListener(v -> send(() -> { if (temp) tapo.set(true, null, 6500); else tapo.color(210, 8); }));
+            LinearLayout.LayoutParams wl = new LinearLayout.LayoutParams(0, -2, 1);
+            wl.rightMargin = Ui.dp(MainActivity.this, 8);
+            whitesRow.addView(warm, wl);
+            whitesRow.addView(cool, new LinearLayout.LayoutParams(0, -2, 1));
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, -2);
+            rowLp.topMargin = Ui.dp(MainActivity.this, 12);
+            box.addView(whitesRow, rowLp);
 
-            SeekBar hue = new SeekBar(MainActivity.this);
-            hue.setMax(360);
-            int[] rainbow = new int[7];
-            for (int i = 0; i < 7; i++) rainbow[i] = android.graphics.Color.HSVToColor(new float[] {i * 60, 1f, 1f});
-            GradientDrawable track = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, rainbow);
-            track.setCornerRadius(Ui.dp(MainActivity.this, 6));
-            hue.setProgressDrawable(track);
-            hue.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
-            hue.setContentDescription("Any colour");
-            hue.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar s, int v, boolean user) {}
-                @Override public void onStartTrackingTouch(SeekBar s) {}
-                @Override public void onStopTrackingTouch(SeekBar s) { send(() -> tapo.color(s.getProgress(), 100)); }
-            });
-            LinearLayout.LayoutParams hueLp = new LinearLayout.LayoutParams(-1, Ui.dp(MainActivity.this, 32));
-            hueLp.topMargin = Ui.dp(MainActivity.this, 16);
-            box.addView(hue, hueLp);
-
-            dialog[0] = new AlertDialog.Builder(MainActivity.this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            new AlertDialog.Builder(MainActivity.this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
                 .setTitle(name)
                 .setView(box)
                 .setNegativeButton("Done", null)
                 .show();
-        }
-
-        private void swatch(android.widget.GridLayout grid, int color, Runnable onTap) {
-            View v = new View(MainActivity.this);
-            v.setBackground(circle(color));
-            v.setOnClickListener(x -> { Ui.haptic(x); onTap.run(); });
-            int d = Ui.dp(MainActivity.this, 44), m = Ui.dp(MainActivity.this, 6);
-            android.widget.GridLayout.LayoutParams lp = new android.widget.GridLayout.LayoutParams();
-            lp.width = d;
-            lp.height = d;
-            lp.setMargins(m, m, m, m);
-            grid.addView(v, lp);
         }
 
         private GradientDrawable circle(int color) {
