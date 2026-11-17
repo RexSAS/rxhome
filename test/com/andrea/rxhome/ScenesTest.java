@@ -22,6 +22,12 @@ public class ScenesTest {
         failsOnLine("A: wait soon", 1);
         failsOnLine("A: tv dance", 1);
         failsOnLine("A: light \"Desk on", 1);
+
+        // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
+        java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");
+        assert l.size() == 2;
+        assert l.get("LED strip").equals("192.168.1.21");
+        assert l.keySet().iterator().next().equals("Ceiling");
     }
 
     static void failsOnLine(String text, int line) {

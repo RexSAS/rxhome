@@ -2,7 +2,9 @@ package com.andrea.rxhome;
 
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -46,6 +48,18 @@ final class Scenes {
                 steps.add(step);
             }
             out.add(new Scene(line.substring(0, colon).trim(), steps));
+        }
+        return out;
+    }
+
+    /** The lights setting: one "Name=IP" per line; lines without "=" are ignored. */
+    static Map<String, String> lights(String text) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (String line : text.split("\n")) {
+            int eq = line.indexOf('=');
+            if (eq > 0 && !line.substring(eq + 1).trim().isEmpty()) {
+                out.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
+            }
         }
         return out;
     }

@@ -101,8 +101,9 @@ class SwitchBot {
         for (String list : new String[] {"deviceList", "infraredRemoteList"}) {
             JSONArray a = body.optJSONArray(list);
             for (int i = 0; a != null && i < a.length(); i++) {
-                JSONObject d = a.getJSONObject(i);
-                out.put(d.getString("deviceId"), d.optString("deviceName", d.getString("deviceId")));
+                JSONObject d = a.optJSONObject(i);
+                String id = d == null ? "" : d.optString("deviceId");
+                if (!id.isEmpty()) out.put(id, d.optString("deviceName", id));
             }
         }
         return out;
