@@ -507,12 +507,54 @@ public class MainActivity extends Activity {
         return col;
     }
 
+    /**
+     * "Choose when run": a card with what the app can open (for RxFilms, every Continue watching and Next up
+     * item); waits for a pick on the scene's thread. Null = cancelled or no answer in 2 minutes.
+     */
+    private String askWhat(String pkg) {
+        List<String> labels = new ArrayList<>(), values = new ArrayList<>();
+        Jellyfin jf = cfg.jellyfin();
+        for (Map.Entry<String, String> c : Scenes.contents(pkg).entrySet()) {
+            if (c.getKey().equals("ask")) continue;
+            if ((c.getKey().equals("resume") || c.getKey().equals("nextup")) && jf != null) {
+                try {
+                    String prefix = c.getKey().equals("resume") ? "Continue: " : "Next up: ";
+                    for (Jellyfin.Item it : c.getKey().equals("resume") ? jf.resumeAll() : jf.nextUpAll()) {
+                        labels.add(prefix + it.label());
+                        values.add("item:" + it.id);
+                    }
+                } catch (IOException e) {
+                    // Jellyfin not answering: those items just aren't offered.
+                }
+                continue;
+            }
+            if (c.getKey().equals("resume") || c.getKey().equals("nextup")) continue; // not signed in
+            labels.add(c.getValue());
+            values.add(c.getKey());
+        }
+        java.util.concurrent.CountDownLatch answered = new java.util.concurrent.CountDownLatch(1);
+        String[] pick = {null};
+        ui(() -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Open " + Scenes.apps().getOrDefault(pkg, pkg) + " on the TV")
+            .setItems(labels.toArray(new String[0]), (d, w) -> pick[0] = values.get(w))
+            .setOnDismissListener(d -> answered.countDown())
+            .show());
+        try {
+            answered.await(2, java.util.concurrent.TimeUnit.MINUTES);
+        } catch (InterruptedException e) {
+            return null;
+        }
+        return pick[0];
+    }
+
     private void runScene(TextView b, Scenes.Scene scene) {
         if (!b.isEnabled()) return;
         Ui.haptic(b);
         b.setEnabled(false);
         b.setText("Running…");
-        SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT));
+        String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
+        SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
+            () -> Server.status(server, pub), cfg.jellyfin(), this::askWhat);
         io.execute(() -> {
             int[] r = runner.run(scene);
             ui(() -> {

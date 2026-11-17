@@ -13,7 +13,7 @@ final class Scenes {
 
     static final String DEFAULT =
           "Movie night: light all on 20; tv on; wait 5; tv app org.rxfilms.tv\n"
-        + "Music: light all on 60 warm; tv on; wait 5; tv music\n"
+        + "Music: light all on 60 warm; tv on; wait 5; tv app org.smarttube.stable claudefm\n"
         + "Gaming: light all on 30; light \"LED strip\" on 100\n"
         + "All off: tv off; light all off\n";
 
@@ -85,6 +85,27 @@ final class Scenes {
         APP_NAMES.put("org.smarttube.stable", "YouTube");
     }
 
+    /**
+     * What a scene can open in an app (value → label): "" just the app, "ask" chosen when the scene runs,
+     * then the app's own shortcuts. Empty for apps rxhome doesn't know.
+     */
+    static Map<String, String> contents(String pkg) {
+        Map<String, String> m = new LinkedHashMap<>();
+        if (!APP_NAMES.containsKey(pkg)) return m;
+        m.put("", "Just the app");
+        m.put("ask", "Choose when run");
+        if (pkg.equals("org.rxfilms.tv")) {
+            m.put("resume", "Continue watching");
+            m.put("nextup", "Next up");
+        } else if (pkg.equals("com.spotify.tv.android")) {
+            m.put("liked", "Liked Songs");
+            m.put("djx", "DJ X");
+        } else {
+            m.put("claudefm", "Claude FM");
+        }
+        return m;
+    }
+
     /** The TV apps the editor offers (package → name). */
     static Map<String, String> apps() {
         return APP_NAMES;
@@ -105,11 +126,16 @@ final class Scenes {
                 return d.toString();
             }
             case "tv":
-                if (s[1].equals("app")) return "Open " + APP_NAMES.getOrDefault(s[2], s[2]) + " on the TV";
+                if (s[1].equals("app")) {
+                    String app = APP_NAMES.getOrDefault(s[2], s[2]);
+                    if (s.length < 4) return "Open " + app + " on the TV";
+                    if (s[3].equals("ask")) return "Open " + app + " on the TV · choose when run";
+                    return app + ": " + contents(s[2]).get(s[3]) + " on the TV";
+                }
                 if (s[1].equals("music")) return "Claude FM on the TV";
                 return "TV " + s[1];
             case "server":
-                return "Press the server's power button";
+                return s[1].equals("press") ? "Press the server's power button" : "Server must be " + s[1];
             case "wait":
                 return "Wait " + s[1] + " s";
             default:
@@ -173,10 +199,11 @@ final class Scenes {
                 break;
             case "tv":
                 ok = s.length == 2 && (s[1].equals("on") || s[1].equals("off") || s[1].equals("music"))
-                    || s.length == 3 && s[1].equals("app");
+                    || s.length == 3 && s[1].equals("app")
+                    || s.length == 4 && s[1].equals("app") && !s[3].isEmpty() && contents(s[2]).containsKey(s[3]);
                 break;
             case "server":
-                ok = s.length == 2 && s[1].equals("press");
+                ok = s.length == 2 && (s[1].equals("on") || s[1].equals("off") || s[1].equals("press"));
                 break;
             case "wait":
                 ok = s.length == 2 && s[1].matches("\\d{1,3}");

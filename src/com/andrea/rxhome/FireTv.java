@@ -235,6 +235,13 @@ class FireTv {
     static final String SMARTTUBE = "org.smarttube.stable", SPOTIFY = "com.spotify.tv.android",
         RXFILMS = "org.rxfilms.tv/org.jellyfin.androidtv.ui.startup.StartupActivity";
 
+    static final String LIKED = "spotify:collection:tracks", DJ_X = "spotify:playlist:37i9dQZF1EYkqdzj48dyYq";
+
+    /** The Claude FM live stream on the TV (looks up its current video id first). */
+    void claudeFm() throws IOException {
+        play(claudeFmId());
+    }
+
     /** Plays a YouTube video on the TV, in SmartTube. */
     void play(String youtubeId) throws IOException {
         view("https://www.youtube.com/watch?v=" + youtubeId, SMARTTUBE);

@@ -12,12 +12,24 @@ class SceneRunner {
     private final FireTv tv;
     private final SwitchBot sb;
     private final String botId;
+    private final java.util.function.Supplier<State> server;
+    private final Jellyfin jf;
+    private final Ask ask;
 
-    SceneRunner(Map<String, Tapo> lights, FireTv tv, SwitchBot sb, String botId) {
+    /** For "choose when run": shows the choices for an app and returns one (Scenes.contents value or "item:<id>"); null = cancelled. */
+    interface Ask {
+        String choose(String pkg);
+    }
+
+    SceneRunner(Map<String, Tapo> lights, FireTv tv, SwitchBot sb, String botId,
+            java.util.function.Supplier<State> server, Jellyfin jf, Ask ask) {
         this.lights = lights;
         this.tv = tv;
         this.sb = sb;
         this.botId = botId;
+        this.server = server;
+        this.jf = jf;
+        this.ask = ask;
     }
 
     /** Returns {steps done, steps total}. */
@@ -57,11 +69,19 @@ class SceneRunner {
                 if (tv == null) return false;
                 if (s[1].equals("on")) tv.wake();
                 else if (s[1].equals("off")) tv.sleep();
-                else if (s[1].equals("app")) tv.launch(s[2]);
-                else tv.play(FireTv.claudeFmId());
+                else if (s[1].equals("app")) return open(s[2], s.length == 4 ? s[3] : "");
+                else tv.claudeFm(); // the old "tv music" step
                 return true;
             case "server":
                 if (sb == null || botId == null || botId.isEmpty()) return false;
+                if (s[1].equals("press")) {
+                    sb.command(botId, "press");
+                    return true;
+                }
+                boolean want = s[1].equals("on"), isOn = server.get() == State.ON;
+                if (want == isOn) return true;
+                // Away (the stick doesn't answer): "off" may just be out of reach, and a press could switch it off.
+                if (want && (tv == null || tv.state() == State.UNREACHABLE)) return false;
                 sb.command(botId, "press");
                 return true;
             case "wait":
@@ -69,6 +89,40 @@ class SceneRunner {
                 return true;
             default:
                 return false;
+        }
+    }
+
+    /** Opens an app on the TV, or something in it (Scenes.contents), asking first for "ask". */
+    private boolean open(String pkg, String what) throws IOException {
+        if (what.equals("ask")) {
+            if (ask == null) return false;
+            what = ask.choose(pkg);
+            if (what == null) return false;
+        }
+        switch (what) {
+            case "":
+                tv.launch(pkg);
+                return true;
+            case "liked":
+                tv.view(FireTv.LIKED, FireTv.SPOTIFY);
+                return true;
+            case "djx":
+                tv.view(FireTv.DJ_X, FireTv.SPOTIFY);
+                return true;
+            case "claudefm":
+                tv.claudeFm();
+                return true;
+            case "resume":
+            case "nextup":
+                if (jf == null) return false;
+                java.util.List<Jellyfin.Item> items = what.equals("resume") ? jf.resumeAll() : jf.nextUpAll();
+                if (items.isEmpty()) return false;
+                tv.openItem(FireTv.RXFILMS, items.get(0).id);
+                return true;
+            default:
+                if (!what.startsWith("item:")) return false;
+                tv.openItem(FireTv.RXFILMS, what.substring(5));
+                return true;
         }
     }
 

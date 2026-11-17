@@ -54,6 +54,26 @@ public class ScenesTest {
         assert Arrays.equals(Scenes.color("color:210,80"), new int[] {210, 80});
         assert Scenes.color("warm") == null;
 
+        // "Server must be on/off" (the old "server press" still reads).
+        assert Scenes.parse("A: server on; server off; server press").get(0).steps.size() == 3;
+        failsOnLine("A: server sideways", 1);
+        assert Scenes.describe(new String[] {"server", "on"}).equals("Server must be on");
+        assert Scenes.describe(new String[] {"server", "off"}).equals("Server must be off");
+
+        // Open an app, and what in it: just the app, chosen when the scene runs, or something specific.
+        assert Scenes.parse("A: tv app com.spotify.tv.android liked; tv app org.rxfilms.tv ask; tv app org.smarttube.stable claudefm")
+            .get(0).steps.size() == 3;
+        failsOnLine("A: tv app com.spotify.tv.android claudefm", 1); // not a Spotify thing
+        failsOnLine("A: tv app com.example liked", 1);              // only the known apps have extras
+        assert Scenes.describe(new String[] {"tv", "app", "com.spotify.tv.android", "liked"}).equals("Spotify: Liked Songs on the TV");
+        assert Scenes.describe(new String[] {"tv", "app", "org.rxfilms.tv", "ask"}).equals("Open RxFilms on the TV · choose when run");
+        assert Scenes.describe(new String[] {"tv", "app", "org.smarttube.stable", "claudefm"}).equals("YouTube: Claude FM on the TV");
+        assert Scenes.contents("org.rxfilms.tv").keySet().toString().equals("[, ask, resume, nextup]");
+        assert Scenes.contents("com.spotify.tv.android").get("djx").equals("DJ X");
+        assert Scenes.contents("com.example").keySet().toString().equals("[]");
+        // The default Music scene plays Claude FM through YouTube now.
+        assert Scenes.DEFAULT.contains("Music: light all on 60 warm; tv on; wait 5; tv app org.smarttube.stable claudefm");
+
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");
         assert l.size() == 2;

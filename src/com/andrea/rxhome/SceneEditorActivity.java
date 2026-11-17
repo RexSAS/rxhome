@@ -132,11 +132,32 @@ public class SceneEditorActivity extends Activity {
                 if (s[1].equals("app")) {
                     Map<String, String> apps = Scenes.apps();
                     chips(tile, new ArrayList<>(apps.values()), apps.get(s[2]), pick -> {
-                        for (Map.Entry<String, String> e : apps.entrySet()) if (e.getValue().equals(pick)) s[2] = e.getKey();
+                        for (Map.Entry<String, String> e : apps.entrySet()) {
+                            if (e.getValue().equals(pick) && !e.getKey().equals(s[2])) {
+                                steps.set(i, new String[] {"tv", "app", e.getKey()}); // what's on offer differs per app
+                            }
+                        }
                     });
+                    // What to open: just the app, chosen when the scene runs, or one of the app's shortcuts.
+                    Map<String, String> what = Scenes.contents(s[2]);
+                    if (!what.isEmpty()) {
+                        sub(tile, "WHAT");
+                        chips(tile, new ArrayList<>(what.values()), what.get(s.length == 4 ? s[3] : ""), pick -> {
+                            for (Map.Entry<String, String> e : what.entrySet()) {
+                                if (e.getValue().equals(pick)) {
+                                    steps.set(i, e.getKey().isEmpty() ? new String[] {"tv", "app", s[2]}
+                                        : new String[] {"tv", "app", s[2], e.getKey()});
+                                }
+                            }
+                        });
+                    }
                 } else if (!s[1].equals("music")) {
                     chips(tile, Arrays.asList("On", "Off"), s[1].equals("on") ? "On" : "Off", pick -> s[1] = pick.toLowerCase());
                 }
+                break;
+            case "server":
+                chips(tile, Arrays.asList("On", "Off"), s[1].equals("on") ? "On" : s[1].equals("off") ? "Off" : "",
+                    pick -> steps.set(i, new String[] {"server", pick.toLowerCase()}));
                 break;
             case "wait":
                 slider(tile, 1, 60, Integer.parseInt(s[1]), v -> {
@@ -145,7 +166,7 @@ public class SceneEditorActivity extends Activity {
                 });
                 break;
             default:
-                break; // server press, Claude FM: nothing to set
+                break; // the old Claude FM step: nothing to set
         }
         return tile;
     }
@@ -240,6 +261,14 @@ public class SceneEditorActivity extends Activity {
         return out.toArray(new String[0]);
     }
 
+    /** A small label inside a step, e.g. "WHAT". */
+    private void sub(LinearLayout tile, String text) {
+        TextView t = Ui.text(this, text, 11, Ui.DIM, true);
+        t.setLetterSpacing(0.08f);
+        t.setPadding(0, Ui.dp(this, 12), 0, 0);
+        tile.addView(t);
+    }
+
     private interface Pick {
         void picked(String choice);
     }
@@ -305,9 +334,8 @@ public class SceneEditorActivity extends Activity {
     }
 
     private void addStep() {
-        String[] names = {"Lights", "TV on / off", "Open an app on the TV", "Claude FM on the TV", "Press the server's power button", "Wait"};
-        String[][] start = {{"light", "all", "on"}, {"tv", "on"}, {"tv", "app", "org.rxfilms.tv"}, {"tv", "music"},
-            {"server", "press"}, {"wait", "5"}};
+        String[] names = {"Lights", "TV on / off", "Open an app on the TV", "Server must be on / off", "Wait"};
+        String[][] start = {{"light", "all", "on"}, {"tv", "on"}, {"tv", "app", "org.rxfilms.tv"}, {"server", "on"}, {"wait", "5"}};
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Add a step")
             .setItems(names, (d, w) -> {

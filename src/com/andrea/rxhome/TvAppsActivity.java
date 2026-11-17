@@ -28,8 +28,6 @@ import java.util.concurrent.Executors;
  */
 public class TvAppsActivity extends Activity {
 
-    private static final String DJ_X = "spotify:playlist:37i9dQZF1EYkqdzj48dyYq", LIKED = "spotify:collection:tracks";
-
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final ExecutorService pictures = Executors.newFixedThreadPool(4);
     private Config cfg;
@@ -60,19 +58,19 @@ public class TvAppsActivity extends Activity {
 
         LinearLayout spotify = row(col, R.drawable.ic_app_spotify, "Spotify", FireTv.SPOTIFY);
         ImageView liked = card(spotify, "Liked Songs", "", "♥", () -> {
-            tv.view(LIKED, FireTv.SPOTIFY);
+            tv.view(FireTv.LIKED, FireTv.SPOTIFY);
             return "Playing your Liked Songs on the TV";
         });
         liked.setImageDrawable(gradient(0xFF4A1DD6, 0xFF8FD3C3));
         ImageView dj = card(spotify, "DJ X", "", "DJ X", () -> {
-            tv.view(DJ_X, FireTv.SPOTIFY);
+            tv.view(FireTv.DJ_X, FireTv.SPOTIFY);
             return "Starting DJ X on the TV";
         });
         dj.setImageDrawable(gradient(0xFF101418, Ui.RED));
 
         LinearLayout youtube = row(col, R.drawable.ic_app_youtube, "YouTube", FireTv.SMARTTUBE);
         ImageView claude = card(youtube, "Claude FM", "Live", null, () -> {
-            tv.play(FireTv.claudeFmId());
+            tv.claudeFm();
             return "Playing Claude FM on the TV";
         });
         pictures.execute(() -> show(claude, fetch("https://i.ytimg.com/vi/" + FireTv.claudeFmId() + "/hqdefault_live.jpg")));
