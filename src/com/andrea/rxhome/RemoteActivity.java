@@ -60,16 +60,7 @@ public class RemoteActivity extends Activity {
         top.addView(power);
         col.addView(top);
 
-        // Rarely used keys up top, small: you look for these anyway.
-        TextView apps = Ui.button(this, "APPS", false);
-        apps.setOnClickListener(v -> MainActivity.showApps(this, io, tv));
-        small(apps);
-        LinearLayout extras = row(small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
-            small(key("MUTE", 164)), apps);
-        ((LinearLayout.LayoutParams) extras.getLayoutParams()).topMargin = Ui.dp(this, 12);
-        col.addView(extras);
-
-        // The no-look part: a touchpad filling the screen, the main keys along the bottom edge.
+        // The no-look part: a touchpad filling the screen (swipes, taps and shapes, see Gestures).
         TouchpadView pad = new TouchpadView(this, new Gestures.Out() {
             @Override public void press(int code) { send(() -> tv.key(code)); }
             @Override public void down(int code) { send(() -> tv.keyDown(code)); }
@@ -81,16 +72,19 @@ public class RemoteActivity extends Activity {
         padLp.bottomMargin = Ui.dp(this, 12);
         col.addView(pad, padLp);
 
-        TextView back = key("BACK", 4), play = key("⏯", 85), home = key("HOME", 3);
-        for (TextView b : new TextView[] {back, play, home}) b.setMinHeight(Ui.dp(this, 76));
-        col.addView(row(back, play, home));
+        // Home, back and play/pause are gestures on the pad; the rest sit along the bottom edge
+        // (BACK too, as a backup if a gesture is misread).
+        TextView apps = small(Ui.button(this, "APPS", false));
+        apps.setOnClickListener(v -> MainActivity.showApps(this, io, tv));
+        col.addView(row(small(key("BACK", 4)), small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
+            small(key("MUTE", 164)), apps));
 
         setContentView(col);
     }
 
     private TextView small(TextView b) {
         b.setTextSize(13);
-        b.setMinHeight(Ui.dp(this, 44));
+        b.setMinHeight(Ui.dp(this, 56));
         return b;
     }
 

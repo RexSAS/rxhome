@@ -22,6 +22,9 @@ final class TouchpadView extends View {
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path chevron = new Path();
+    private final Path trailPath = new Path();
+    private final java.util.List<float[]> trail = new java.util.ArrayList<>();
+    private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF box = new RectF();
     private final Gestures gestures;
     private boolean touching;
@@ -50,7 +53,10 @@ final class TouchpadView extends View {
         text.setTextAlign(Paint.Align.CENTER);
         text.setColor(Ui.DIM);
         text.setTextSize(Ui.dp(c, 13));
-        setContentDescription("Touchpad: swipe to move, tap for OK, hold for a long press");
+        label.setTypeface(Ui.font(c, true));
+        label.setTextAlign(Paint.Align.CENTER);
+        label.setColor(Ui.RED);
+        setContentDescription("Touchpad: swipe to move, tap for OK, hold for a long press, circle for home, a backwards C for back, a C for play or pause");
     }
 
     private void feel(int code, int haptic) {
@@ -75,9 +81,20 @@ final class TouchpadView extends View {
         c.drawLine(w / 2, h * 0.2f, w / 2, h * 0.8f, line);
         c.drawLine(w * 0.2f, h / 2, w * 0.8f, h / 2, line);
         if (!touching) {
-            c.drawText("Swipe to move · Tap for OK · Hold for long press", w / 2, h - Ui.dp(getContext(), 18), text);
+            c.drawText("Swipe · Tap = OK · Hold = long press", w / 2, h - Ui.dp(getContext(), 38), text);
+            c.drawText("○ Home   ⊃ Back   C Play/pause", w / 2, h - Ui.dp(getContext(), 18), text);
         }
 
+        if (touching && trail.size() > 1) {
+            // The stroke so far, so circles and Cs can be drawn on purpose.
+            line.setColor(0x99ff1e3c);
+            line.setStrokeWidth(Ui.dp(getContext(), 4));
+            line.setStrokeCap(Paint.Cap.ROUND);
+            trailPath.reset();
+            trailPath.moveTo(trail.get(0)[0], trail.get(0)[1]);
+            for (float[] p : trail) trailPath.lineTo(p[0], p[1]);
+            c.drawPath(trailPath, line);
+        }
         if (touching) {
             fill.setColor(0x33ff1e3c);
             c.drawCircle(fx, fy, Ui.dp(getContext(), 44), fill);
@@ -102,6 +119,11 @@ final class TouchpadView extends View {
         line.setStrokeJoin(Paint.Join.ROUND);
         if (flashCode == Gestures.OK) {
             c.drawCircle(cx, cy, s * 0.7f, line);
+        } else if (flashCode == Gestures.HOME || flashCode == Gestures.BACK || flashCode == Gestures.PLAY_PAUSE) {
+            label.setAlpha(alpha);
+            label.setTextSize(s * 0.8f);
+            String name = flashCode == Gestures.HOME ? "HOME" : flashCode == Gestures.BACK ? "BACK" : "⏯";
+            c.drawText(name, cx, cy - (label.descent() + label.ascent()) / 2, label);
         } else {
             float ux = flashCode == Gestures.RIGHT ? 1 : flashCode == Gestures.LEFT ? -1 : 0;
             float uy = flashCode == Gestures.DOWN ? 1 : flashCode == Gestures.UP ? -1 : 0;
@@ -123,10 +145,13 @@ final class TouchpadView extends View {
             case MotionEvent.ACTION_DOWN:
                 touching = true;
                 getParent().requestDisallowInterceptTouchEvent(true);
+                trail.clear();
+                trail.add(new float[] {fx, fy});
                 gestures.down(fx, fy, t);
                 main.postDelayed(tick, TICK_MS);
                 break;
             case MotionEvent.ACTION_MOVE:
+                trail.add(new float[] {fx, fy});
                 gestures.move(fx, fy, t);
                 break;
             case MotionEvent.ACTION_UP:

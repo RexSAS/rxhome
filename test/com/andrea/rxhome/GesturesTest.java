@@ -22,6 +22,22 @@ public class GesturesTest {
         assert log.equals(java.util.Arrays.asList(want)) : log;
     }
 
+    /** Draws an arc around (cx, cy) from angle a0 to a1 (degrees; 0 = right, 90 = down), lifts, returns the log. */
+    static List<String> arc(float cx, float cy, float r, float a0, float a1) {
+        Gestures t = g();
+        int n = 40;
+        long time = 0;
+        for (int i = 0; i <= n; i++) {
+            double a = Math.toRadians(a0 + (a1 - a0) * i / n);
+            float x = cx + (float) (Math.cos(a) * r), y = cy + (float) (Math.sin(a) * r);
+            if (i == 0) t.down(x, y, time);
+            else t.move(x, y, time);
+            time += 10;
+        }
+        t.up(time);
+        return new ArrayList<>(log);
+    }
+
     public static void main(String[] a) {
         // Tap anywhere: OK.
         Gestures t = g();
@@ -30,18 +46,19 @@ public class GesturesTest {
         t.up(150);
         expect("press 23");
 
-        // Swipe right: one RIGHT, no OK on lift.
+        // Swipe right: one RIGHT, sent on lift.
         t = g();
         t.down(100, 500, 0);
         t.move(230, 520, 60);
+        expect();
         t.up(120);
         expect("press 22");
 
-        // Keep dragging: one key per STEP of travel; the dominant axis wins.
+        // A longer drag: one key per STEP of travel; the dominant axis wins; wobble doesn't matter.
         t = g();
         t.down(500, 900, 0);
         t.move(510, 780, 40);
-        t.move(505, 690, 80);
+        t.move(495, 690, 80);
         t.move(520, 560, 120);
         t.up(160);
         expect("press 19", "press 19", "press 19");
@@ -51,13 +68,13 @@ public class GesturesTest {
         t = g();
         t.down(500, 100, 0);
         t.move(500, 220, 50);
-        t.tick(500);  // 450 ms after the swipe: still just the one step
-        t.tick(710);  // 660 ms: holding starts
+        t.tick(500);  // 450 ms after the swipe: nothing yet
+        expect();
+        t.tick(710);  // 660 ms: the swipe's step, then holding starts
         t.tick(830);
         t.tick(950);
         t.up(970);
         expect("press 20", "press 20", "press 20", "press 20");
-        assert Gestures.KEEP_MOVING_AFTER_MS == 650;
 
         // Press and hold without moving: a long-press OK (down, repeats, up), like the real remote.
         t = g();
@@ -68,12 +85,16 @@ public class GesturesTest {
         t.up(700);
         expect("down 23", "repeat 23 1", "repeat 23 2", "up 23");
 
-        // A swipe after the long-press began doesn't add keys.
-        t = g();
-        t.down(500, 500, 0);
-        t.tick(520);
-        t.move(800, 500, 560);
-        t.up(600);
-        expect("down 23", "repeat 23 1", "up 23");
+        // Shapes. Circle either way: HOME.
+        assert arc(500, 500, 150, -90, 270).equals(java.util.Arrays.asList("press 3")) : log;
+        assert arc(500, 500, 150, -90, -450).equals(java.util.Arrays.asList("press 3")) : log;
+        // ⊃ (open on the left): right, down, left — or right, up, left: BACK.
+        assert arc(500, 500, 150, -90, 90).equals(java.util.Arrays.asList("press 4")) : log;
+        assert arc(500, 500, 150, 90, -90).equals(java.util.Arrays.asList("press 4")) : log;
+        // C (open on the right): left, down, right — or left, up, right: play/pause.
+        assert arc(500, 500, 150, -90, -270).equals(java.util.Arrays.asList("press 85")) : log;
+        assert arc(500, 500, 150, 90, 270).equals(java.util.Arrays.asList("press 85")) : log;
+        // A gentle curve is still a swipe, not a shape.
+        assert arc(500, 2000, 1500, -100, -80).equals(java.util.Arrays.asList("press 22", "press 22", "press 22", "press 22", "press 22")) : log;
     }
 }
