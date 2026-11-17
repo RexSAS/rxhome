@@ -9,7 +9,6 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.IOException;
@@ -41,7 +40,7 @@ public class RemoteActivity extends Activity {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         int p = Ui.dp(this, 16);
-        col.setPadding(p, p, p, Ui.dp(this, 28));
+        col.setPadding(p, p, p, Ui.dp(this, 20));
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
@@ -61,31 +60,54 @@ public class RemoteActivity extends Activity {
         top.addView(power);
         col.addView(top);
 
-        // Empty space above: the controls hang at the bottom, where the thumb is.
-        col.addView(new View(this), new LinearLayout.LayoutParams(-1, 0, 1));
-
-        col.addView(row(key("BACK", 4), key("HOME", 3), key("MENU", 82)));
-
-        DpadView pad = new DpadView(this);
-        pad.listener = new DpadView.Listener() {
-            @Override public void down(int code) { Ui.haptic(pad); hold(code); }
-            @Override public void up(int code) { release(code); }
-        };
-        LinearLayout.LayoutParams padLp = new LinearLayout.LayoutParams(-1, -2);
-        padLp.topMargin = Ui.dp(this, 8);
-        padLp.bottomMargin = Ui.dp(this, 16);
-        col.addView(pad, padLp);
-
-        col.addView(row(key("◀◀", 89), key("⏯", 85), key("▶▶", 90)));
-        col.addView(row(key("VOL −", 25), key("MUTE", 164), key("VOL +", 24)));
+        // Rarely used keys up top, small: you look for these anyway.
         TextView apps = Ui.button(this, "APPS", false);
         apps.setOnClickListener(v -> MainActivity.showApps(this, io, tv));
-        col.addView(row(apps));
+        small(apps);
+        LinearLayout extras = row(small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
+            small(key("MUTE", 164)), apps);
+        ((LinearLayout.LayoutParams) extras.getLayoutParams()).topMargin = Ui.dp(this, 12);
+        col.addView(extras);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true); // lets the spacer push the controls to the bottom
-        scroll.addView(col, new ScrollView.LayoutParams(-1, -1));
-        setContentView(scroll);
+        // The no-look part: a touchpad filling the screen, the main keys along the bottom edge.
+        TouchpadView pad = new TouchpadView(this, new Gestures.Out() {
+            @Override public void press(int code) { send(() -> tv.key(code)); }
+            @Override public void down(int code) { send(() -> tv.keyDown(code)); }
+            @Override public void repeat(int code, int n) { if (queued.get() < 2) send(() -> tv.keyRepeat(code, n)); }
+            @Override public void up(int code) { send(() -> tv.keyUp(code)); }
+        });
+        LinearLayout.LayoutParams padLp = new LinearLayout.LayoutParams(-1, 0, 1);
+        padLp.topMargin = Ui.dp(this, 4);
+        padLp.bottomMargin = Ui.dp(this, 12);
+        col.addView(pad, padLp);
+
+        TextView back = key("BACK", 4), play = key("⏯", 85), home = key("HOME", 3);
+        for (TextView b : new TextView[] {back, play, home}) b.setMinHeight(Ui.dp(this, 76));
+        col.addView(row(back, play, home));
+
+        setContentView(col);
+    }
+
+    private TextView small(TextView b) {
+        b.setTextSize(13);
+        b.setMinHeight(Ui.dp(this, 44));
+        return b;
+    }
+
+    // The phone's own volume buttons drive the TV's while the remote is open: found by feel.
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+            if (queued.get() < 2) send(() -> tv.key(keyCode));
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, android.view.KeyEvent event) {
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return true;
+        return super.onKeyUp(keyCode, event);
     }
 
     @Override

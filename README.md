@@ -3,7 +3,7 @@
 A phone app with fast controls for the home setup, part of [rxenv](https://github.com/RexSAS/rxenv):
 
 - **rexserver**: online or not (LAN address first, then `rxfilms.rxsas.it`), CPU / temperature / RAM / uptime, and a power button that presses the server's SwitchBot Bot (works from anywhere, even with the server off).
-- **TV**: puts the FireStick to sleep or wakes it, a full remote on the phone, and opening TV apps.
+- **TV**: puts the FireStick to sleep or wakes it, a no-look remote (touchpad: swipe to move, tap for OK, hold for long press; BACK / ⏯ / HOME along the bottom edge; the phone's volume buttons drive the TV's; holding any key holds it on the TV), and opening TV apps.
 - **Tapo lights**: on/off and brightness, straight over Wi-Fi without the Tapo cloud.
 - **Scenes**: one tap for several things, e.g. *Movie night* = lights 20%, TV on, open RxFilms.
 
