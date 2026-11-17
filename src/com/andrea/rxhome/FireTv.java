@@ -169,6 +169,27 @@ class FireTv {
         key(WAKEUP);
     }
 
+    /**
+     * The TV's own power state when paired (stick = the FireStick's state, already known by the caller):
+     * a TV that doesn't answer while the stick does is in standby; neither answering = away, unknown.
+     * Not paired: the stick's state stands in.
+     */
+    State tvState(State stick) {
+        Philips p = philips;
+        if (p == null) return stick;
+        try {
+            return p.isOn() ? State.ON : State.OFF;
+        } catch (IOException e) {
+            return stick == State.UNREACHABLE ? State.UNREACHABLE : State.OFF;
+        }
+    }
+
+    /** The power button: by the TV's state, not the stick's. */
+    void togglePower(State stick) throws IOException {
+        if (tvState(stick) == State.ON) sleep();
+        else wake();
+    }
+
     /** A key on the TV itself: "VolumeUp", "VolumeDown", "Mute". */
     void tvKey(String key) throws IOException {
         Philips p = philips;

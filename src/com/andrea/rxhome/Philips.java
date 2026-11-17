@@ -61,6 +61,12 @@ class Philips {
         request("POST", "/6/input/key", "{\"key\":\"" + key + "\"}", ip, user, pass, certPin, null);
     }
 
+    /** True when the TV is on (not standby). In deep standby it's off the network: IOException. */
+    boolean isOn() throws IOException {
+        String r = request("GET", "/6/powerstate", null, ip, user, pass, certPin, null);
+        return r.replace(" ", "").contains("\"powerstate\":\"On\"");
+    }
+
     void power(boolean on) throws IOException {
         request("POST", "/6/powerstate", "{\"powerstate\":\"" + (on ? "On" : "Standby") + "\"}", ip, user, pass, certPin, null);
     }
@@ -164,38 +170,68 @@ class Philips {
 
     // --- HTTPS with digest login ---
 
+    // Speed: the TV is slow at TLS, so connections are kept alive (one shared socket factory and hostname
+    // check per TV, replies read to the end, never disconnect()) and the digest challenge is remembered,
+    // so a key is one request on an open connection instead of a handshake plus two requests.
+    private static final javax.net.ssl.HostnameVerifier ANY_NAME = (h, s) -> true; // identity = pinned cert
+    private static final Map<String, javax.net.ssl.SSLSocketFactory> FACTORIES = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<String, Map<String, String>> CHALLENGES = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<String, java.util.concurrent.atomic.AtomicInteger> COUNTS = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static String request(String method, String path, String body, String ip, String user, String pass,
             String pin, String[] seenPin) throws IOException {
+        String login = ip + "|" + user;
+        Map<String, String> known = user == null ? null : CHALLENGES.get(login);
         HttpURLConnection c = open(method, path, ip, pin, seenPin);
-        try {
-            int code = send(c, body);
-            if (code == 401 && user != null) {
-                Map<String, String> ch = challenge(c.getHeaderField("WWW-Authenticate"));
-                c.disconnect();
-                c = open(method, path, ip, pin, seenPin);
-                byte[] cn = new byte[8];
-                new SecureRandom().nextBytes(cn);
-                c.setRequestProperty("Authorization", digest(user, pass, method, path, ch, hex(cn), 1));
-                code = send(c, body);
-            }
-            if (code == 401) throw new IOException("The TV doesn't know rxhome any more: pair again in Settings");
-            if (code >= 400) throw new IOException("TV answered HTTP " + code);
-            try (InputStream in = c.getInputStream()) {
-                return read(in);
-            }
-        } finally {
-            c.disconnect();
+        if (known != null) c.setRequestProperty("Authorization", authorize(login, user, pass, method, path, known, false));
+        int code = send(c, body);
+        if (code == 401 && user != null) {
+            Map<String, String> ch = challenge(c.getHeaderField("WWW-Authenticate"));
+            drain(c, code);
+            CHALLENGES.put(login, ch);
+            c = open(method, path, ip, pin, seenPin);
+            c.setRequestProperty("Authorization", authorize(login, user, pass, method, path, ch, true));
+            code = send(c, body);
+        }
+        String reply = drain(c, code);
+        if (code == 401) throw new IOException("The TV doesn't know rxhome any more: pair again in Settings");
+        if (code >= 400) throw new IOException("TV answered HTTP " + code);
+        return reply;
+    }
+
+    private static String authorize(String login, String user, String pass, String method, String path,
+            Map<String, String> ch, boolean fresh) {
+        java.util.concurrent.atomic.AtomicInteger n = COUNTS.computeIfAbsent(login, k -> new java.util.concurrent.atomic.AtomicInteger());
+        if (fresh) n.set(0);
+        byte[] cn = new byte[8];
+        new SecureRandom().nextBytes(cn);
+        return digest(user, pass, method, path, ch, hex(cn), n.incrementAndGet());
+    }
+
+    /** Reads the reply to the end (so the connection can be reused) and returns it. */
+    private static String drain(HttpURLConnection c, int code) throws IOException {
+        InputStream in = code < 400 ? c.getInputStream() : c.getErrorStream();
+        if (in == null) return "";
+        try (InputStream i = in) {
+            return read(i);
         }
     }
 
     private static HttpURLConnection open(String method, String path, String ip, String pin, String[] seenPin) throws IOException {
-        HttpsURLConnection c = (HttpsURLConnection) new URL("https://" + ip + ":1926" + path).openConnection();
+        String host = ip.contains(":") ? ip : ip + ":1926";
+        HttpsURLConnection c = (HttpsURLConnection) new URL("https://" + host + path).openConnection();
         c.setConnectTimeout(1500);
         c.setReadTimeout(4000);
         c.setRequestMethod(method);
         c.setRequestProperty("Content-Type", "application/json");
-        c.setSSLSocketFactory(pinned(pin, seenPin));
-        c.setHostnameVerifier((h, s) -> true); // identity is the pinned certificate, not a name
+        if (pin != null) {
+            javax.net.ssl.SSLSocketFactory f = FACTORIES.get(pin);
+            if (f == null) FACTORIES.put(pin, f = pinned(pin, null));
+            c.setSSLSocketFactory(f);
+        } else {
+            c.setSSLSocketFactory(pinned(null, seenPin)); // pairing: record the certificate
+        }
+        c.setHostnameVerifier(ANY_NAME);
         return c;
     }
 

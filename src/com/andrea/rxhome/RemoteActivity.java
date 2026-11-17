@@ -50,8 +50,7 @@ public class RemoteActivity extends Activity {
             Ui.haptic(v);
             keys.execute(() -> {
                 try {
-                    if (tv.state() == State.ON) tv.sleep();
-                    else tv.wake();
+                    tv.togglePower(tv.state());
                 } catch (IOException e) {
                     fail(e);
                 }

@@ -34,6 +34,18 @@ public class FireTvTest {
         };
     }
 
+    /** A paired TV that is on (true), in standby (false) or not answering (null). */
+    static Philips tvThatIs(Boolean on) {
+        return new Philips("x", "u", "p", "c") {
+            @Override boolean isOn() throws java.io.IOException {
+                if (on == null) throw new java.io.IOException("off the network");
+                return on;
+            }
+            @Override void key(String k) { calls.add("tv " + k); }
+            @Override void power(boolean v) { calls.add("tv power " + v); }
+        };
+    }
+
     public static void main(String[] a) throws Exception {
         // With the Philips paired, TV off/on switch the TV itself, then the stick.
         FireTv t = stick();
@@ -51,6 +63,23 @@ public class FireTvTest {
         t.setPhilips(philips(true), null);
         t.sleep();
         assert calls.equals(java.util.Arrays.asList("stick 223")) : calls;
+        // Power follows the TV, not the FireStick: TV on → off; TV in standby or off the network → on.
+        for (Boolean on : new Boolean[] {true, false, null}) {
+            calls.clear();
+            FireTv p = stick();
+            p.setPhilips(tvThatIs(on), null);
+            assert p.tvState(State.ON) == (on == null ? State.OFF : on ? State.ON : State.OFF);
+            p.togglePower(State.ON);
+            assert calls.equals(on != null && on
+                ? java.util.Arrays.asList("tv Standby", "stick 223")
+                : java.util.Arrays.asList("tv power true", "stick 224")) : on + " " + calls;
+        }
+        // Away from home (stick unreachable too): the TV's state is unknown, not "off".
+        FireTv awayTv = stick();
+        awayTv.setPhilips(tvThatIs(null), null);
+        assert awayTv.tvState(State.UNREACHABLE) == State.UNREACHABLE;
+        calls.clear();
+
         // Not paired: volume says what to do.
         FireTv bare = stick();
         try {

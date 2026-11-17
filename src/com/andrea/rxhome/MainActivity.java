@@ -222,7 +222,9 @@ public class MainActivity extends Activity {
 
     private void showTv(State s, boolean fresh) {
         if (fresh) cfg.prefs.edit().putString("last_tv", s.name()).apply();
-        tvStatus.setText(s == State.ON ? "On · FireStick" : s == State.OFF ? "Standby · FireStick" : AWAY);
+        boolean paired = cfg.philips() != null; // then the state is the TV's own, else the FireStick's
+        tvStatus.setText(s == State.ON ? (paired ? "On" : "On · FireStick")
+            : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);
         tvStatus.setTextColor(Ui.DIM);
         Ui.reachable(tvTile, s != State.UNREACHABLE);
     }
@@ -233,12 +235,11 @@ public class MainActivity extends Activity {
         FireTv tv = cfg.tv();
         io.execute(() -> {
             try {
-                if (tv.state() == State.ON) tv.sleep();
-                else tv.wake();
+                tv.togglePower(tv.state());
             } catch (IOException e) {
                 ui(() -> toast(adbError(e)));
             }
-            State s = tv.state();
+            State s = tv.tvState(tv.state());
             ui(() -> showTv(s, true));
         });
     }
@@ -458,7 +459,7 @@ public class MainActivity extends Activity {
         }));
         io.execute(() -> {
             try {
-                State s = tv.checkedState();
+                State s = tv.tvState(tv.checkedState());
                 ui(() -> { if (gen == generation) showTv(s, true); });
             } catch (IOException e) {
                 ui(() -> {
