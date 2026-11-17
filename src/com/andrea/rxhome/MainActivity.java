@@ -196,7 +196,7 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout text = new LinearLayout(this);
         text.setOrientation(LinearLayout.VERTICAL);
-        text.addView(Ui.text(this, "Living room TV", 18, Ui.TEXT, true));
+        text.addView(Ui.text(this, "Tv", 18, Ui.TEXT, true));
         tvStatus = Ui.text(this, "", 13, Ui.DIM, false);
         text.addView(tvStatus);
         row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
@@ -295,6 +295,7 @@ public class MainActivity extends Activity {
         final Tapo tapo;
         final String name;
         boolean updating;
+        String problem;
 
         LightRow(String name, Tapo tapo) {
             this.name = name;
@@ -364,6 +365,7 @@ public class MainActivity extends Activity {
                     bar.setEnabled(i.has("brightness"));
                 });
             } catch (IOException e) {
+                problem = e.getMessage();
                 ui(() -> Ui.reachable(view, false));
             }
         }
@@ -375,12 +377,12 @@ public class MainActivity extends Activity {
         rows.clear();
         Map<String, Tapo> lights = cfg.lights();
         if (lights.isEmpty()) {
-            tile.addView(Ui.text(this, "Add your Tapo lights in Settings (⚙)", 13, Ui.DIM, false));
+            tile.addView(Ui.text(this, "Looking for Tapo lights on this Wi-Fi…", 13, Ui.DIM, false));
         }
         for (Map.Entry<String, Tapo> e : lights.entrySet()) {
             LightRow r = new LightRow(e.getKey(), e.getValue());
             rows.put(e.getKey(), r);
-            r.view.setOnClickListener(v -> toast(AWAY));
+            r.view.setOnClickListener(v -> toast(r.problem != null ? r.problem : AWAY));
             tile.addView(r.view);
         }
         return tile;
@@ -467,6 +469,34 @@ public class MainActivity extends Activity {
             }
         });
         for (LightRow r : rows.values()) io.execute(r::load);
+        io.execute(this::findLights);
+    }
+
+    /** Background: finds Tapo lights on the Wi-Fi, names them, and redraws if the list changed. */
+    private void findLights() {
+        try {
+            Map<String, String> found = new LinkedHashMap<>();
+            for (TapoDiscovery.Found f : TapoDiscovery.discover(1500)) {
+                String name = f.fallbackName();
+                try {
+                    String n = new Tapo(f.ip, cfg.get(Config.TAPO_EMAIL), cfg.get(Config.TAPO_PASSWORD)).info().optString("name");
+                    if (!n.trim().isEmpty()) name = n.trim();
+                } catch (IOException e) {
+                    // Can't log in yet (e.g. Third-Party Compatibility off): keep the placeholder name.
+                }
+                found.put(f.ip, name);
+            }
+            String before = cfg.get(Config.LIGHTS);
+            String after = TapoDiscovery.merge(before, found);
+            if (after.equals(before)) return;
+            cfg.put(Config.LIGHTS, after);
+            ui(() -> {
+                setContentView(build());
+                for (LightRow r : rows.values()) io.execute(r::load);
+            });
+        } catch (IOException e) {
+            // Not on Wi-Fi: nothing to find.
+        }
     }
 
     private void ui(Runnable r) {

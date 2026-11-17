@@ -57,6 +57,27 @@ public class TapoTest {
             old.stop(0);
         }
 
+        // 2025 firmware (TPAP) with Third-Party Compatibility off: KLAP gets 403 and the old login
+        // error 1003, exactly what the L900-5 strips answer. The user must be told which switch to flip.
+        com.sun.net.httpserver.HttpServer tpap = com.sun.net.httpserver.HttpServer.create(
+            new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+        tpap.createContext("/", x -> {
+            boolean klap = x.getRequestURI().getPath().startsWith("/app/handshake1");
+            byte[] body = (klap ? "" : "{\"error_code\":1003}").getBytes("UTF-8");
+            x.sendResponseHeaders(klap ? 403 : 200, body.length == 0 ? -1 : body.length);
+            if (body.length > 0) x.getResponseBody().write(body);
+            x.close();
+        });
+        tpap.start();
+        try {
+            new Tapo("127.0.0.1:" + tpap.getAddress().getPort(), "a@b.c", "pw").info();
+            throw new AssertionError("TPAP-only device accepted");
+        } catch (java.io.IOException expected) {
+            assert expected.getMessage().contains("Third-Party Compatibility") : expected.getMessage();
+        } finally {
+            tpap.stop(0);
+        }
+
         // set_device_info only carries what was asked, and drops colour temperature on devices without it.
         assert Tapo.setParams(true, 20, 2700, false).equals("{\"device_on\":true,\"brightness\":20}");
         assert Tapo.setParams(false, null, null, true).equals("{\"device_on\":false}");

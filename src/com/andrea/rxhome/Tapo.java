@@ -28,6 +28,8 @@ import org.json.JSONObject;
 class Tapo {
 
     private static final int TIMEOUT = 1500;
+    static final String THIRD_PARTY =
+        "Turn on Third-Party Compatibility in the Tapo app (Me → Third-Party Services)";
     private final String ip, email, password;
     private Session klap;
     private byte[] ptKey, ptIv;
@@ -127,7 +129,13 @@ class Tapo {
             post("/app/handshake2", sha256(remote, local, auth));
             klap = new Session(local, remote, auth);
         } else {
-            passthroughLogin();
+            try {
+                passthroughLogin();
+            } catch (IOException e) {
+                // 2025 firmware speaks TPAP and only allows these older logins with this switch on.
+                if (r.code == 403) throw new IOException(THIRD_PARTY);
+                throw e;
+            }
         }
     }
 
