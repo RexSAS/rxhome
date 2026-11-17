@@ -98,7 +98,9 @@ final class Scenes {
                 StringBuilder d = new StringBuilder(who + " " + s[2]);
                 if (s[2].equals("on") && s.length >= 4) d.append(" · ").append(s[3]).append('%');
                 if (s.length == 5) {
-                    d.append(" · ").append(s[4].equals("warm") ? "warm white" : s[4].equals("cool") ? "cool white" : s[4] + "K");
+                    int[] c = color(s[4]);
+                    d.append(" · ").append(c != null ? colorName(c[0], c[1])
+                        : s[4].equals("warm") ? "warm white" : s[4].equals("cool") ? "cool white" : s[4] + "K");
                 }
                 return d.toString();
             }
@@ -113,6 +115,21 @@ final class Scenes {
             default:
                 return String.join(" ", s);
         }
+    }
+
+    /** {hue, saturation} of a "color:H,S" value (hue 0-360, saturation 0-100), else null. */
+    static int[] color(String token) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("color:(\\d{1,3}),(\\d{1,3})").matcher(token);
+        if (!m.matches()) return null;
+        int h = Integer.parseInt(m.group(1)), sat = Integer.parseInt(m.group(2));
+        return h <= 360 && sat <= 100 ? new int[] {h, sat} : null;
+    }
+
+    /** A colour in words, e.g. "blue", "pale green". */
+    static String colorName(int hue, int sat) {
+        String n = hue < 15 || hue >= 345 ? "red" : hue < 45 ? "orange" : hue < 70 ? "yellow" : hue < 160 ? "green"
+            : hue < 200 ? "cyan" : hue < 250 ? "blue" : hue < 290 ? "purple" : "pink";
+        return sat < 35 ? "pale " + n : n;
     }
 
     /** One line for Settings' scene rows. */
@@ -152,7 +169,7 @@ final class Scenes {
             case "light":
                 ok = s.length >= 3 && s.length <= 5 && (s[2].equals("on") || s[2].equals("off"));
                 if (ok && s.length >= 4) ok = percent(s[3]);
-                if (ok && s.length == 5) ok = s[4].equals("warm") || s[4].equals("cool") || kelvin(s[4]);
+                if (ok && s.length == 5) ok = s[4].equals("warm") || s[4].equals("cool") || kelvin(s[4]) || color(s[4]) != null;
                 break;
             case "tv":
                 ok = s.length == 2 && (s[1].equals("on") || s[1].equals("off") || s[1].equals("music"))

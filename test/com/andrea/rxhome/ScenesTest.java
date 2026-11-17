@@ -43,6 +43,17 @@ public class ScenesTest {
         assert Scenes.summary(Scenes.parse(Scenes.DEFAULT).get(0)).equals("4 steps · All lights on · 20%, …")
             : Scenes.summary(Scenes.parse(Scenes.DEFAULT).get(0));
 
+        // Colour in a light step: color:<hue 0-360>,<saturation 0-100>, named in words.
+        assert Arrays.equals(Scenes.parse("A: light all on 80 color:210,80").get(0).steps.get(0),
+            new String[] {"light", "all", "on", "80", "color:210,80"});
+        failsOnLine("A: light all on 80 color:400,10", 1);
+        failsOnLine("A: light all on 80 color:red", 1);
+        assert Scenes.describe(new String[] {"light", "all", "on", "80", "color:210,80"}).equals("All lights on · 80% · blue");
+        assert Scenes.describe(new String[] {"light", "Desk", "on", "50", "color:0,100"}).equals("Desk on · 50% · red");
+        assert Scenes.describe(new String[] {"light", "Desk", "on", "50", "color:120,20"}).equals("Desk on · 50% · pale green");
+        assert Arrays.equals(Scenes.color("color:210,80"), new int[] {210, 80});
+        assert Scenes.color("warm") == null;
+
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");
         assert l.size() == 2;

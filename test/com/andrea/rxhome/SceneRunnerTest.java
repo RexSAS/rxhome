@@ -26,6 +26,12 @@ public class SceneRunnerTest {
             if (broken) throw new IOException("unreachable");
             log.add(name + " " + on + " " + brightness + " " + kelvin);
         }
+
+        @Override
+        void color(int hue, int saturation) throws IOException {
+            if (broken) throw new IOException("unreachable");
+            log.add(name + " color " + hue + " " + saturation);
+        }
     }
 
     static class FakeTv extends FireTv {
@@ -54,6 +60,12 @@ public class SceneRunnerTest {
         done = r.run(Scenes.parse("X: light Desk on 60 warm; light Nope off; server press; tv off").get(0));
         assert Arrays.equals(done, new int[] {2, 4}) : Arrays.toString(done);
         assert log.equals(Arrays.asList("Desk true 60 2700", "tv sleep")) : log;
+
+        // A colour: brightness first, then the colour.
+        log.clear();
+        done = r.run(Scenes.parse("X: light Desk on 80 color:210,80").get(0));
+        assert Arrays.equals(done, new int[] {1, 1}) : Arrays.toString(done);
+        assert log.equals(Arrays.asList("Desk true 80 null", "Desk color 210 80")) : log;
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));

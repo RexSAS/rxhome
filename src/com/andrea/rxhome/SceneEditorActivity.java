@@ -170,10 +170,61 @@ public class SceneEditorActivity extends Activity {
                 steps.set(i, light(steps.get(i), null, null, Integer.toString(v), null));
                 title.setText((i + 1) + ". " + Scenes.describe(steps.get(i)));
             });
-            String white = s.length == 5 ? (s[4].equals("warm") ? "Warm white" : s[4].equals("cool") ? "Cool white" : "Colour as is") : "Colour as is";
-            chips(tile, Arrays.asList("Colour as is", "Warm white", "Cool white"), white,
-                pick -> steps.set(i, light(steps.get(i), null, null, null, pick.startsWith("Warm") ? "warm" : pick.startsWith("Cool") ? "cool" : "")));
+            int[] col = s.length == 5 ? Scenes.color(s[4]) : null;
+            String chosen = col != null ? "Colour…"
+                : s.length == 5 ? (s[4].equals("warm") ? "Warm white" : s[4].equals("cool") ? "Cool white" : "Colour as is") : "Colour as is";
+            chips(tile, Arrays.asList("Colour as is", "Warm white", "Cool white", "Colour…"), chosen, pick -> {
+                if (pick.equals("Colour…")) {
+                    pickColor(i, col);
+                    return;
+                }
+                steps.set(i, light(steps.get(i), null, null, null, pick.startsWith("Warm") ? "warm" : pick.startsWith("Cool") ? "cool" : ""));
+            });
+            if (col != null) {
+                // The chosen colour: a dot and its name; tap to change it.
+                LinearLayout preview = new LinearLayout(this);
+                preview.setGravity(Gravity.CENTER_VERTICAL);
+                preview.setPadding(0, Ui.dp(this, 10), 0, 0);
+                View dot = new View(this);
+                android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+                g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                g.setColor(android.graphics.Color.HSVToColor(new float[] {col[0], col[1] / 100f, 1f}));
+                g.setStroke(Ui.dp(this, 2), Ui.BUTTON);
+                dot.setBackground(g);
+                int d = Ui.dp(this, 28);
+                preview.addView(dot, new LinearLayout.LayoutParams(d, d));
+                TextView n = Ui.text(this, "  " + Scenes.colorName(col[0], col[1]) + " · tap to change", 13, Ui.DIM, false);
+                preview.addView(n);
+                preview.setContentDescription("Colour " + Scenes.colorName(col[0], col[1]) + ", tap to change");
+                preview.setOnClickListener(v -> pickColor(i, col));
+                tile.addView(preview);
+            }
         }
+    }
+
+    /** The colour wheel for a light step; "Use colour" stores it as color:H,S. */
+    private void pickColor(int i, int[] current) {
+        ColorWheelView wheel = new ColorWheelView(this);
+        int[] picked = current != null ? current.clone() : new int[] {0, 100};
+        wheel.setColor(picked[0], picked[1]);
+        wheel.listener = (h, sat, done) -> {
+            picked[0] = h;
+            picked[1] = sat;
+        };
+        LinearLayout box = new LinearLayout(this);
+        box.setGravity(Gravity.CENTER_HORIZONTAL);
+        int p = Ui.dp(this, 16);
+        box.setPadding(p, p / 2, p, 0);
+        box.addView(wheel);
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Colour")
+            .setView(box)
+            .setPositiveButton("Use colour", (dlg, w) -> {
+                steps.set(i, light(steps.get(i), null, null, null, "color:" + picked[0] + "," + picked[1]));
+                render();
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 
     /** A light step with some parts changed (null = keep, "" = drop). Keeps the format's order rules. */

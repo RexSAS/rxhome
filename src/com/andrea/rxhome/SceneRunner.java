@@ -41,11 +41,13 @@ class SceneRunner {
                 if (targets.isEmpty()) return false;
                 boolean on = s[2].equals("on");
                 Integer brightness = s.length >= 4 ? Integer.valueOf(s[3]) : null;
-                Integer kelvin = s.length == 5 ? kelvin(s[4]) : null;
+                int[] color = s.length == 5 ? Scenes.color(s[4]) : null;
+                Integer kelvin = s.length == 5 && color == null ? kelvin(s[4]) : null;
                 boolean all = true;
                 for (Tapo t : targets) {
                     try {
                         t.set(on, brightness, kelvin);
+                        if (color != null) t.color(color[0], color[1]); // after the brightness, like the light rows
                     } catch (IOException e) {
                         all = false;
                     }
