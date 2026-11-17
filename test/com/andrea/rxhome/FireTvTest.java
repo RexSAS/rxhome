@@ -13,7 +13,53 @@ public class FireTvTest {
         }
     }
 
+    static final java.util.List<String> calls = new java.util.ArrayList<>();
+
+    static FireTv stick() {
+        return new FireTv(null) {
+            @Override synchronized void key(int code) { calls.add("stick " + code); }
+        };
+    }
+
+    static Philips philips(boolean broken) {
+        return new Philips("x", "u", "p", "c") {
+            @Override void key(String k) throws java.io.IOException {
+                if (broken) throw new java.io.IOException("TV asleep");
+                calls.add("tv " + k);
+            }
+            @Override void power(boolean on) throws java.io.IOException {
+                if (broken) throw new java.io.IOException("TV asleep");
+                calls.add("tv power " + on);
+            }
+        };
+    }
+
     public static void main(String[] a) throws Exception {
+        // With the Philips paired, TV off/on switch the TV itself, then the stick.
+        FireTv t = stick();
+        t.setPhilips(philips(false), null);
+        t.sleep();
+        assert calls.equals(java.util.Arrays.asList("tv Standby", "stick 223")) : calls;
+        calls.clear();
+        t.wake();
+        assert calls.equals(java.util.Arrays.asList("tv power true", "stick 224")) : calls;
+        calls.clear();
+        t.tvKey("VolumeUp");
+        assert calls.equals(java.util.Arrays.asList("tv VolumeUp")) : calls;
+        // TV unreachable (e.g. already in standby): the stick still sleeps.
+        calls.clear();
+        t.setPhilips(philips(true), null);
+        t.sleep();
+        assert calls.equals(java.util.Arrays.asList("stick 223")) : calls;
+        // Not paired: volume says what to do.
+        FireTv bare = stick();
+        try {
+            bare.tvKey("VolumeUp");
+            throw new AssertionError("volume without a paired TV");
+        } catch (java.io.IOException e) {
+            assert e.getMessage().contains("Pair") : e.getMessage();
+        }
+
         // Nothing listens on port 9: unreachable, and fast (the home screen never waits on a dead device).
         long t0 = System.currentTimeMillis();
         assert Server.status("http://127.0.0.1:9") == State.UNREACHABLE;

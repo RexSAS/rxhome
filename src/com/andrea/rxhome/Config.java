@@ -12,13 +12,15 @@ final class Config {
 
     static final String SERVER = "server", SERVER_PUBLIC = "server_public", FIRETV = "firetv", SB_TOKEN = "sb_token", SB_SECRET = "sb_secret",
         SB_BOT = "sb_bot", TAPO_EMAIL = "tapo_email", TAPO_PASSWORD = "tapo_password", LIGHTS = "lights",
-        SCENES = "scenes";
+        SCENES = "scenes", PHILIPS_IP = "philips_ip", PHILIPS_USER = "philips_user",
+        PHILIPS_PASS = "philips_pass", PHILIPS_CERT = "philips_cert", PHILIPS_MAC = "philips_mac";
 
     private static final Map<String, String> DEFAULTS = new LinkedHashMap<>();
     static {
         DEFAULTS.put(SERVER, "http://192.168.1.166:8096");
         DEFAULTS.put(SERVER_PUBLIC, "https://rxfilms.rxsas.it");
         DEFAULTS.put(FIRETV, "192.168.1.49");
+        DEFAULTS.put(PHILIPS_IP, "192.168.1.221");
         DEFAULTS.put(SCENES, Scenes.DEFAULT);
     }
 
@@ -54,6 +56,7 @@ final class Config {
             tv = new FireTv(new Adb(host, 5555, key), keysAdb, helperDex());
             tvHost = host;
         }
+        tv.setPhilips(philips(), get(PHILIPS_MAC));
         return tv;
     }
 
@@ -67,6 +70,12 @@ final class Config {
         } catch (java.io.IOException e) {
             return null;
         }
+    }
+
+    /** The Philips TV's own API; null until paired in Settings. */
+    Philips philips() {
+        return get(PHILIPS_USER).isEmpty() ? null
+            : new Philips(get(PHILIPS_IP), get(PHILIPS_USER), get(PHILIPS_PASS), get(PHILIPS_CERT));
     }
 
     /** Null until a token and secret are set. */

@@ -53,6 +53,11 @@ public class SettingsActivity extends Activity {
 
         section(col, "TV");
         field(col, Config.FIRETV, "FireStick IP address (ADB debugging on)", InputType.TYPE_CLASS_PHONE, false);
+        field(col, Config.PHILIPS_IP, "Philips TV IP address (for its volume and power; the TV must be on to pair)",
+            InputType.TYPE_CLASS_PHONE, false);
+        TextView pairTv = Ui.button(this, cfg.get(Config.PHILIPS_USER).isEmpty() ? "PAIR WITH THE TV" : "PAIR WITH THE TV AGAIN", false);
+        pairTv.setOnClickListener(this::pairTv);
+        col.addView(pairTv);
 
         section(col, "Tapo lights");
         field(col, Config.TAPO_EMAIL, "Tapo account email", InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, false);
@@ -108,6 +113,52 @@ public class SettingsActivity extends Activity {
         col.addView(e);
         fields.put(key, e);
         return e;
+    }
+
+    /** The TV shows a PIN; typing it here gives rxhome a login for the TV's own API. */
+    private void pairTv(View v) {
+        String ip = fields.get(Config.PHILIPS_IP).getText().toString().trim();
+        io.execute(() -> {
+            try {
+                Philips.Pairing p = Philips.pairRequest(ip);
+                runOnUiThread(() -> askPin(ip, p));
+            } catch (IOException e) {
+                runOnUiThread(() -> Toast.makeText(this, "Can't reach the TV (is it on?): " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    private void askPin(String ip, Philips.Pairing p) {
+        if (isFinishing()) return;
+        EditText pin = new EditText(this);
+        pin.setInputType(InputType.TYPE_CLASS_NUMBER);
+        pin.setHint("PIN");
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Type the PIN shown on the TV")
+            .setView(pin)
+            .setPositiveButton("Pair", (d, w) -> io.execute(() -> {
+                try {
+                    Philips.pairGrant(ip, p, pin.getText().toString());
+                    String mac = null;
+                    try {
+                        mac = new Philips(ip, p.deviceId, p.authKey, p.certPin).mac();
+                    } catch (IOException e) {
+                        // Without the MAC the TV can still be switched off, just not woken from standby.
+                    }
+                    cfg.put(Config.PHILIPS_IP, ip);
+                    cfg.put(Config.PHILIPS_USER, p.deviceId);
+                    cfg.put(Config.PHILIPS_PASS, p.authKey);
+                    cfg.put(Config.PHILIPS_CERT, p.certPin);
+                    if (mac != null) cfg.put(Config.PHILIPS_MAC, mac);
+                    String done = mac != null ? "Paired with the TV"
+                        : "Paired with the TV (couldn't read its MAC: switching it on may not work)";
+                    runOnUiThread(() -> Toast.makeText(this, done, Toast.LENGTH_LONG).show());
+                } catch (IOException e) {
+                    runOnUiThread(() -> Toast.makeText(this, "Pairing failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                }
+            }))
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 
     private void pickBot(View v) {

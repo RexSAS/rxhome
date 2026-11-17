@@ -32,6 +32,7 @@ Open ⚙ Settings:
    For the CPU / temperature / RAM line, install node_exporter on rexserver once: `sudo apt install prometheus-node-exporter` (serves `:9100/metrics` on the LAN; the line is hidden when it can't be reached).
 2. **SwitchBot**: in the SwitchBot app, Profile → Preferences → tap *App Version* 10 times → Developer Options shows the token and secret. Paste both, then *Pick the Bot* and choose the one on the server's button.
 3. **TV**: the FireStick's IP (default `192.168.1.49`). The first time, the TV shows "Allow USB debugging?" for *rxhome*: tick *Always allow* and accept.
+   **Philips TV** (volume, mute, real power): with the TV on, tap *Pair with the TV* and type the PIN it shows (its own JointSPACE API, as pylips does it). To switch it on from standby, enable *Switch on with Wi-Fi (WoWLAN)* in the TV's network settings; rxhome sends Wake-on-LAN to the MAC it reads at pairing.
 4. **Tapo**: your Tapo account email and password. Lights and plugs are found on the Wi-Fi automatically (UDP broadcast, port 20002) and named as in the Tapo app; the list in Settings (`Name=IP`) can be renamed and follows lights whose IP changes. Put `#` before a name (`#Desk strip=…`) to hide that light from rxhome and its scenes; discovery won't add it back.
    Lights on 2025 firmware (TPAP login, e.g. the L900-5 strips) only accept rxhome's local login with **Third-Party Compatibility** on: Tapo app → Me → Third-Party Services → Third-Party Compatibility. Until then they show as "L900 .10" and stay grey; tap one to see why.
 5. **Scenes**: one per line, `Name: step; step; …`. Steps: `light <name|all> on|off [0-100] [warm|cool]`, `tv on|off`, `tv app <package>`, `tv music` (Claude FM in SmartTube), `server press`, `wait <seconds>`. Names with spaces go in quotes: `light "LED strip" on 100`.
@@ -40,7 +41,7 @@ IPs can change: if your Poste Italiane router lets you reserve addresses (static
 
 ## Known limits
 
-- **The Philips TV's own power isn't controlled by the app.** Fire OS never sends the "TV off" HDMI-CEC message, the Alexa remote's infrared can only be fired by Amazon's own system apps, and the TV has no network control. The power button sleeps and wakes the FireStick; for the TV to follow, turn on **EasyLink (HDMI-CEC)** and the Eco setting **switch off when there's no signal** on the Philips.
-- For the same reason **VOL / MUTE** may not change the TV's volume.
+- Without pairing the Philips TV, power only sleeps/wakes the FireStick (Fire OS never sends CEC standby; the Alexa remote's infrared is closed to apps), and volume/mute do nothing.
+
 - The server status can't tell "off" from "can't reach it" away from home (Cloudflare only lets in allowed IPs), so it shows "unknown" there.
 - Tapo: KLAP (and the older passthrough login) only. TPAP, the SPAKE2+ login of 2025 firmware, isn't implemented; with Third-Party Compatibility on, those devices accept KLAP.

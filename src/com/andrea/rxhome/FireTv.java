@@ -126,14 +126,54 @@ class FireTv {
         }
     }
 
-    // The Philips follows only through its own settings (EasyLink, "switch off with no signal"):
-    // Fire OS never sends CEC Standby and its remote's IR is closed to apps (see the design doc).
+    // The TV itself (Fire OS never sends it CEC Standby and its remote's IR is closed to apps): the
+    // Philips' own network API, when paired. Its MAC wakes it from standby, when it went off the network.
+    private volatile Philips philips;
+    private volatile String philipsMac;
+
+    void setPhilips(Philips p, String mac) {
+        philips = p;
+        philipsMac = mac == null || mac.isEmpty() ? null : mac;
+    }
+
+    /** TV to standby (if paired and reachable), then the stick to sleep. */
     void sleep() throws IOException {
+        Philips p = philips;
+        if (p != null) {
+            try {
+                p.key("Standby");
+            } catch (IOException e) {
+                // Already off, or not on this network: the stick still goes to sleep.
+            }
+        }
         key(SLEEP);
     }
 
+    /** TV on (Wake-on-LAN, then the API if it's awake), then the stick. */
     void wake() throws IOException {
+        if (philipsMac != null) {
+            try {
+                Philips.wake(philipsMac);
+            } catch (IOException | IllegalArgumentException e) {
+                // No broadcast here (away from home): the API call below may still work.
+            }
+        }
+        Philips p = philips;
+        if (p != null) {
+            try {
+                p.power(true);
+            } catch (IOException e) {
+                // Still waking up: Wake-on-LAN has been sent.
+            }
+        }
         key(WAKEUP);
+    }
+
+    /** A key on the TV itself: "VolumeUp", "VolumeDown", "Mute". */
+    void tvKey(String key) throws IOException {
+        Philips p = philips;
+        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
+        p.key(key);
     }
 
     void launch(String pkg) throws IOException {

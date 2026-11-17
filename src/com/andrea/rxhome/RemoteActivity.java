@@ -77,9 +77,20 @@ public class RemoteActivity extends Activity {
         TextView apps = small(Ui.button(this, "APPS", false));
         apps.setOnClickListener(v -> MainActivity.showApps(this, io, tv));
         col.addView(row(small(key("BACK", 4)), small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
-            small(key("MUTE", 164)), apps));
+            small(tvButton("MUTE", "Mute")), apps));
 
         setContentView(col);
+    }
+
+    /** A key for the TV itself (through the paired Philips API, not the FireStick). */
+    private TextView tvButton(String label, String key) {
+        TextView b = Ui.button(this, label, false);
+        b.setContentDescription(label);
+        b.setOnClickListener(v -> {
+            Ui.haptic(v);
+            send(() -> tv.tvKey(key));
+        });
+        return b;
     }
 
     private TextView small(TextView b) {
@@ -92,7 +103,8 @@ public class RemoteActivity extends Activity {
     @Override
     public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
         if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
-            if (queued.get() < 2) send(() -> tv.key(keyCode));
+            String k = keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP ? "VolumeUp" : "VolumeDown";
+            if (queued.get() < 2) send(() -> tv.tvKey(k));
             return true;
         }
         return super.onKeyDown(keyCode, event);
@@ -191,8 +203,9 @@ public class RemoteActivity extends Activity {
     }
 
     private void fail(IOException e) {
+        String why = e.getMessage() != null && e.getMessage().startsWith("Pair") ? e.getMessage() : MainActivity.adbError(e);
         runOnUiThread(() -> {
-            if (!isDestroyed()) Toast.makeText(this, MainActivity.adbError(e), Toast.LENGTH_SHORT).show();
+            if (!isDestroyed()) Toast.makeText(this, why, Toast.LENGTH_SHORT).show();
         });
     }
 }
