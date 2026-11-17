@@ -23,5 +23,13 @@ public class VpnTest {
         assert !Vpn.shouldStop(now - 9_000, now);
         assert Vpn.shouldStop(now - 11_000, now);
         assert Vpn.JELLYFIN.equals("org.jellyfin.mobile");
+
+        // After a Wi-Fi change (rxhome's tunnel dropped first): up again only if home is out of reach,
+        // you're in rxhome or Jellyfin, and no VPN is up already.
+        assert Vpn.wantUp(false, false, true, false);
+        assert !Vpn.wantUp(true, false, true, false);   // server answers: home Wi-Fi
+        assert !Vpn.wantUp(false, true, true, false);   // FireStick answers: home Wi-Fi
+        assert !Vpn.wantUp(false, false, false, false); // not in rxhome or Jellyfin
+        assert !Vpn.wantUp(false, false, true, true);   // a VPN is already up
     }
 }

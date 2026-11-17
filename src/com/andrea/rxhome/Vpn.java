@@ -23,6 +23,11 @@ final class Vpn {
         return "com.andrea.rxhome".equals(pkg) || JELLYFIN.equals(pkg);
     }
 
+    /** After a Wi-Fi change: bring the tunnel up only if home is out of reach while you're in our apps. */
+    static boolean wantUp(boolean serverAnswers, boolean stickAnswers, boolean oursInFront, boolean vpnUp) {
+        return !serverAnswers && !stickAnswers && oursInFront && !vpnUp;
+    }
+
     /** Off after GRACE_MS without rxhome or Jellyfin in front, so a quick hop elsewhere doesn't drop it. */
     static boolean shouldStop(long lastSeenOurs, long now) {
         return now - lastSeenOurs > GRACE_MS;

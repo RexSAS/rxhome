@@ -64,6 +64,8 @@ public class MainActivity extends Activity {
         // Coming back counts as wanting the tunnel again (TunnelWatch may have switched it off): the
         // once-a-minute limit is only for rxhome's own re-checks.
         vpnTriedAt = -Vpn.RETRY_MS;
+        // Watches Wi-Fi changes and which app is in front while you use rxhome or Jellyfin.
+        startForegroundService(new Intent(this, TunnelWatch.class));
         // Rebuilt on every resume: settings may have changed lights or scenes.
         setContentView(build());
         refresh();
@@ -548,8 +550,8 @@ public class MainActivity extends Activity {
         // Needs "Allow remote control apps" on in WireGuard's settings, or it's silently ignored.
         System.err.println("rxhome-vpn: asking WireGuard to bring up " + Vpn.TUNNEL);
         sendBroadcast(new Intent(Vpn.ACTION_UP).setPackage(Vpn.PACKAGE).putExtra("tunnel", Vpn.TUNNEL));
-        // Switches it off again once neither rxhome nor Jellyfin is in front (see TunnelWatch).
-        startForegroundService(new Intent(this, TunnelWatch.class));
+        // rxhome's tunnel: TunnelWatch may switch it off again (home Wi-Fi, or rxhome and Jellyfin left).
+        cfg.put(TunnelWatch.OURS, "1");
         vpnNote = "Away from home: connecting WireGuard (" + Vpn.TUNNEL + ")…";
         showServer(State.UNREACHABLE, false);
         // The handshake home can take ~20 s: keep checking every 3 s for 30 s, until the server answers.
