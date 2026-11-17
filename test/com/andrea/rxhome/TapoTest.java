@@ -78,6 +78,14 @@ public class TapoTest {
             tpap.stop(0);
         }
 
+        // Colour: hue 0-360, saturation 0-100, colour temperature 0 to leave white mode; switches it on.
+        assert Tapo.colorParams(120, 100).equals("{\"device_on\":true,\"hue\":120,\"saturation\":100,\"color_temp\":0}")
+            : Tapo.colorParams(120, 100);
+        assert Tapo.colorParams(400, -5).equals("{\"device_on\":true,\"hue\":360,\"saturation\":0,\"color_temp\":0}");
+        // A light can do colour when its info reports a hue.
+        assert Tapo.hasColor(new org.json.JSONObject("{\"hue\":0,\"saturation\":100,\"color_temp\":0}"));
+        assert !Tapo.hasColor(new org.json.JSONObject("{\"brightness\":50}"));
+
         // set_device_info only carries what was asked, and drops colour temperature on devices without it.
         assert Tapo.setParams(true, 20, 2700, false).equals("{\"device_on\":true,\"brightness\":20}");
         assert Tapo.setParams(false, null, null, true).equals("{\"device_on\":false}");

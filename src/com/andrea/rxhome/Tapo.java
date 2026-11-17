@@ -61,6 +61,22 @@ class Tapo {
         call("{\"method\":\"set_device_info\",\"params\":" + setParams(on, brightness, kelvin, i.has("color_temp_range")) + "}");
     }
 
+    /** A colour (hue 0-360, saturation 0-100); also switches the light on. */
+    void color(int hue, int saturation) throws IOException {
+        call("{\"method\":\"set_device_info\",\"params\":" + colorParams(hue, saturation) + "}");
+    }
+
+    static String colorParams(int hue, int saturation) {
+        int h = Math.max(0, Math.min(360, hue)), s = Math.max(0, Math.min(100, saturation));
+        // color_temp 0 takes the light out of white mode so hue/saturation apply.
+        return "{\"device_on\":true,\"hue\":" + h + ",\"saturation\":" + s + ",\"color_temp\":0}";
+    }
+
+    /** True for colour lights (strips, colour bulbs): their info reports a hue. */
+    static boolean hasColor(JSONObject info) {
+        return info.has("hue");
+    }
+
     static String setParams(Boolean on, Integer brightness, Integer kelvin, boolean hasTemp) {
         StringBuilder s = new StringBuilder("{");
         if (on != null) s.append("\"device_on\":").append(on).append(',');

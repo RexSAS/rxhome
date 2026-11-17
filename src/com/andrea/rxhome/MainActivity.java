@@ -3,6 +3,7 @@ package com.andrea.rxhome;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -279,6 +280,8 @@ public class MainActivity extends Activity {
         final LinearLayout view;
         final SeekBar bar;
         final Switch toggle;
+        final View dot; // the light's colour; tap to change it (colour lights only)
+        JSONObject info;
         final Tapo tapo;
         final String name;
         boolean updating;
@@ -296,6 +299,14 @@ public class MainActivity extends Activity {
             bar.setProgressTintList(android.content.res.ColorStateList.valueOf(Ui.RED));
             bar.setThumbTintList(android.content.res.ColorStateList.valueOf(Ui.RED));
             bar.setContentDescription(name + " brightness");
+            dot = new View(MainActivity.this);
+            dot.setVisibility(View.GONE);
+            dot.setContentDescription(name + " colour");
+            dot.setOnClickListener(v -> { Ui.haptic(v); pickColor(); });
+            int d = Ui.dp(MainActivity.this, 28);
+            LinearLayout.LayoutParams dotLp = new LinearLayout.LayoutParams(d, d);
+            dotLp.rightMargin = Ui.dp(MainActivity.this, 6);
+            view.addView(dot, dotLp);
             view.addView(bar, new LinearLayout.LayoutParams(Ui.dp(MainActivity.this, 120), -2));
             toggle = new Switch(MainActivity.this);
             toggle.setThumbTintList(android.content.res.ColorStateList.valueOf(Ui.TEXT));
@@ -341,21 +352,120 @@ public class MainActivity extends Activity {
             });
         }
 
+        /** The colour a light shows now: white mode (colour_temp > 0) as warm/cool white, else its hue. */
+        int currentColor(JSONObject i) {
+            int k = i.optInt("color_temp", 0);
+            if (k > 0) return k < 4000 ? 0xFFFFC98A : 0xFFEAF2FF;
+            return android.graphics.Color.HSVToColor(new float[] {i.optInt("hue"), i.optInt("saturation") / 100f, 1f});
+        }
+
+        /** Swatches, warm/cool white and a rainbow slider; each choice is sent at once. */
+        void pickColor() {
+            LinearLayout box = new LinearLayout(MainActivity.this);
+            box.setOrientation(LinearLayout.VERTICAL);
+            int p = Ui.dp(MainActivity.this, 20);
+            box.setPadding(p, p / 2, p, 0);
+            android.widget.GridLayout grid = new android.widget.GridLayout(MainActivity.this);
+            grid.setColumnCount(5);
+            AlertDialog[] dialog = new AlertDialog[1];
+            int[][] hues = {{0, 100}, {25, 100}, {55, 100}, {120, 100}, {180, 100}, {215, 100}, {270, 100}, {300, 100}};
+            for (int[] h : hues) {
+                swatch(grid, android.graphics.Color.HSVToColor(new float[] {h[0], h[1] / 100f, 1f}), () -> {
+                    dialog[0].dismiss();
+                    send(() -> tapo.color(h[0], h[1]));
+                });
+            }
+            boolean temp = info != null && info.has("color_temp_range");
+            swatch(grid, 0xFFFFC98A, () -> { // warm white
+                dialog[0].dismiss();
+                send(() -> { if (temp) tapo.set(true, null, 2700); else tapo.color(30, 35); });
+            });
+            swatch(grid, 0xFFEAF2FF, () -> { // cool white
+                dialog[0].dismiss();
+                send(() -> { if (temp) tapo.set(true, null, 6500); else tapo.color(210, 8); });
+            });
+            box.addView(grid);
+
+            SeekBar hue = new SeekBar(MainActivity.this);
+            hue.setMax(360);
+            int[] rainbow = new int[7];
+            for (int i = 0; i < 7; i++) rainbow[i] = android.graphics.Color.HSVToColor(new float[] {i * 60, 1f, 1f});
+            GradientDrawable track = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, rainbow);
+            track.setCornerRadius(Ui.dp(MainActivity.this, 6));
+            hue.setProgressDrawable(track);
+            hue.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
+            hue.setContentDescription("Any colour");
+            hue.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar s, int v, boolean user) {}
+                @Override public void onStartTrackingTouch(SeekBar s) {}
+                @Override public void onStopTrackingTouch(SeekBar s) { send(() -> tapo.color(s.getProgress(), 100)); }
+            });
+            LinearLayout.LayoutParams hueLp = new LinearLayout.LayoutParams(-1, Ui.dp(MainActivity.this, 32));
+            hueLp.topMargin = Ui.dp(MainActivity.this, 16);
+            box.addView(hue, hueLp);
+
+            dialog[0] = new AlertDialog.Builder(MainActivity.this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle(name)
+                .setView(box)
+                .setNegativeButton("Done", null)
+                .show();
+        }
+
+        private void swatch(android.widget.GridLayout grid, int color, Runnable onTap) {
+            View v = new View(MainActivity.this);
+            v.setBackground(circle(color));
+            v.setOnClickListener(x -> { Ui.haptic(x); onTap.run(); });
+            int d = Ui.dp(MainActivity.this, 44), m = Ui.dp(MainActivity.this, 6);
+            android.widget.GridLayout.LayoutParams lp = new android.widget.GridLayout.LayoutParams();
+            lp.width = d;
+            lp.height = d;
+            lp.setMargins(m, m, m, m);
+            grid.addView(v, lp);
+        }
+
+        private GradientDrawable circle(int color) {
+            GradientDrawable g = new GradientDrawable();
+            g.setShape(GradientDrawable.OVAL);
+            g.setColor(color);
+            g.setStroke(Ui.dp(MainActivity.this, 2), Ui.BUTTON);
+            return g;
+        }
+
+        private void send(TapoCall call) {
+            io.execute(() -> {
+                try {
+                    call.run();
+                    load();
+                } catch (IOException e) {
+                    ui(() -> toast(name + ": " + e.getMessage()));
+                }
+            });
+        }
+
         /** Background: read the light's state. */
         void load() {
             try {
                 JSONObject i = tapo.info();
+                info = i;
                 boolean on = i.optBoolean("device_on");
                 int b = i.optInt("brightness", on ? 100 : 0);
                 ui(() -> {
                     show(on, b, true);
                     bar.setEnabled(i.has("brightness"));
+                    if (Tapo.hasColor(i)) {
+                        dot.setBackground(circle(currentColor(i)));
+                        dot.setVisibility(View.VISIBLE);
+                    }
                 });
             } catch (IOException e) {
                 problem = e.getMessage();
                 ui(() -> Ui.reachable(view, false));
             }
         }
+    }
+
+    private interface TapoCall {
+        void run() throws IOException;
     }
 
     private View lightsTile() {
