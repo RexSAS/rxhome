@@ -87,6 +87,15 @@ final class Ui {
         return b;
     }
 
+    /** Switches a button() between its normal and red look (e.g. an active scene). */
+    static void style(TextView b, boolean primary) {
+        TextView fresh = button(b.getContext(), "", primary);
+        int l = b.getPaddingLeft(), t = b.getPaddingTop(), r = b.getPaddingRight(), bo = b.getPaddingBottom();
+        b.setBackground(fresh.getBackground());
+        b.setPadding(l, t, r, bo);
+        b.setTextColor(fresh.getCurrentTextColor());
+    }
+
     /** The round red power button. */
     static TextView power(Context c) {
         TextView b = new TextView(c);

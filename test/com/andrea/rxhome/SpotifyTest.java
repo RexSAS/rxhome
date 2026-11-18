@@ -61,6 +61,16 @@ public class SpotifyTest {
         assert Spotify.volumePath(35).equals("/me/player/volume?volume_percent=35");
         assert Spotify.volumePath(150).equals("/me/player/volume?volume_percent=100") && Spotify.volumePath(-5).endsWith("=0");
 
+        // This phone in Spotify's list: by its name, else the only smartphone; never someone else's.
+        List<Spotify.Device> withPhones = Spotify.parseDevices("{\"devices\":["
+            + "{\"id\":\"e\",\"name\":\"Echo\",\"type\":\"Speaker\"},"
+            + "{\"id\":\"p\",\"name\":\"Nothing Phone (4a) Pro\",\"type\":\"Smartphone\"},"
+            + "{\"id\":\"q\",\"name\":\"Other phone\",\"type\":\"Smartphone\"}]}");
+        assert Spotify.phone(withPhones, "nothing phone (4a) pro").id.equals("p");
+        assert Spotify.phone(withPhones, "A069P") == null;                         // two phones, neither named: unsure
+        assert Spotify.phone(withPhones.subList(0, 2), "A069P").id.equals("p");   // the only one
+        assert Spotify.phone(withPhones.subList(0, 1), "A069P") == null;
+
         // Your own names for speakers ("Spotify name=Your name" lines); unnamed ones keep Spotify's.
         String names = Spotify.rename("", "Echo Dot", "Salotto");
         assert names.equals("Echo Dot=Salotto") : names;

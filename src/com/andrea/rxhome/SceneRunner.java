@@ -120,6 +120,10 @@ class SceneRunner {
                 spotify.transfer(d.id);
                 return true;
             }
+            case "music-pause": // only from turning a scene off (Scenes.undo)
+                if (spotify == null) return false;
+                spotify.pause();
+                return true;
             case "phone":
                 if (openRemote == null) return false;
                 openRemote.run();

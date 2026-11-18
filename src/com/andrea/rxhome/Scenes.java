@@ -181,6 +181,31 @@ final class Scenes {
         return sat < 35 ? "pale " + n : n;
     }
 
+    /**
+     * What turns a scene off again: pause its music, switch off the TV and the lights it leaves on.
+     * The server, waits, keys, volume and app steps are left alone. Empty = nothing to switch off.
+     */
+    static Scene undo(Scene scene) {
+        boolean music = false;
+        Boolean tvOn = null;
+        Map<String, Boolean> lights = new LinkedHashMap<>(); // the last on/off each light was left in
+        for (String[] s : scene.steps) {
+            if (s[0].equals("music")) music = true;
+            else if (s[0].equals("tv") && (s[1].equals("on") || s[1].equals("off"))) tvOn = s[1].equals("on");
+            else if (s[0].equals("light")) {
+                lights.remove(s[1]); // keep the order of the last mention
+                lights.put(s[1], s[2].equals("on"));
+            }
+        }
+        List<String[]> steps = new ArrayList<>();
+        if (music) steps.add(new String[] {"music-pause"});
+        if (Boolean.TRUE.equals(tvOn)) steps.add(new String[] {"tv", "off"});
+        for (Map.Entry<String, Boolean> e : lights.entrySet()) {
+            if (e.getValue()) steps.add(new String[] {"light", e.getKey(), "off"});
+        }
+        return new Scene(scene.name, steps);
+    }
+
     /** One line for Settings' scene rows. */
     static String summary(Scene sc) {
         int n = sc.steps.size();
