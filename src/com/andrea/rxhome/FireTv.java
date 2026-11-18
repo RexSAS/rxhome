@@ -237,10 +237,53 @@ class FireTv {
 
     /**
      * Tells the launcher on the TV what rxhome is doing (so it can fade): event "start" / "swap" / "off" (a
-     * scene), "tv_off" (about to switch the TV off: fade now, fade_ms long); from = a swap's previous scene.
+     * scene, sent right before it first changes the picture), "ready" (its last step has run), "tv_off" (about
+     * to switch the TV off: fade now, fade_ms long); from = a swap's previous scene.
      */
     void signal(String event, String scene, String from) throws IOException {
         if (hasStick) adb.shell(signalCommand(event, scene, from, SceneRunner.FADE_MS), 3000);
+    }
+
+    /** "ready": the scene's last step has run. id names it in the launcher's log (awaitReveal). */
+    void ready(String scene, String id) throws IOException {
+        if (hasStick) adb.shell(signalCommand("ready", scene, null, SceneRunner.FADE_MS) + " --es id " + quote(id), 3000);
+    }
+
+    private static final Pattern REVEAL = Pattern.compile("reveal (\\S+) (\\d+)");
+
+    /**
+     * Waits up to maxMs for the launcher to start fading the picture in after "ready" `id` (it logs
+     * "reveal <id> <ms>"); returns how long that fade lasts, or -1.
+     */
+    int awaitReveal(String id, int maxMs) {
+        long end = System.currentTimeMillis() + maxMs;
+        try {
+            while (System.currentTimeMillis() < end) {
+                int ms = parseReveal(adb.shell("logcat -d -s HomeService:I | grep 'reveal " + id + " '", 3000), id);
+                if (ms >= 0) return ms;
+                Thread.sleep(250);
+            }
+        } catch (IOException | RuntimeException | InterruptedException e) {
+            // No launcher log to follow.
+        }
+        return -1;
+    }
+
+    static int parseReveal(String log, String id) {
+        java.util.regex.Matcher m = REVEAL.matcher(log);
+        while (m.find()) if (m.group(1).equals(id)) return Integer.parseInt(m.group(2));
+        return -1;
+    }
+
+    /** The TV's volume level (a paired Philips), or -1 if it can't be read. */
+    int volume() {
+        Philips p = philips;
+        if (p == null) return -1;
+        try {
+            return Philips.currentVolume(p.get("audio/volume"));
+        } catch (IOException | RuntimeException e) {
+            return -1;
+        }
     }
 
     static String signalCommand(String event, String scene, String from, int fadeMs) {

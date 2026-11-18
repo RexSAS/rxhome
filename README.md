@@ -50,13 +50,14 @@ When a scene runs, rxhome tells each TV it uses, through the stick, with an expl
 
 ```
 am broadcast -a com.andrea.rxhome.SCENE -p com.andrea.tvlauncher
-  --es event   start | swap | off | tv_off
+  --es event   start | swap | off | ready | tv_off
   --es scene   <scene name>
-  --ei fade_ms 1500
+  --ei fade_ms 3000
   --es from    <previous scene>        (swap only)
+  --es id      <id>                    (ready only)
 ```
 
-`start`, `swap` and `off` come as a scene starts, swaps from another one, or is turned off. `tv_off` comes just before rxhome switches that TV off: rxhome then waits `fade_ms` before sending standby, so a fade to black has time to finish. Nothing waits for an answer: without a receiver, the scene runs as before.
+`start`, `swap` and `off` come right before a scene (starting, swapping from another one, or turning off) first changes that TV's picture; rxhome then waits `fade_ms` before changing it, so the launcher can fade to black. `ready` comes once the scene's last step has run: the launcher fades the new picture in when the screen settles and logs `reveal <id> <ms>`, which rxhome follows to bring the TV's volume (paired Philips) back up over the same time; it faded out with the picture. `tv_off` comes just before rxhome switches that TV off: rxhome fades the sound and waits `fade_ms` before sending standby. Without a receiver, scenes still run; the sound just comes back after 30 s.
 
 - The server status can't tell "off" from "can't reach it" away from home (Cloudflare only lets in allowed IPs), so it shows "unknown" there.
 - Tapo: KLAP (and the older passthrough login) only. TPAP, the SPAKE2+ login of 2025 firmware, isn't implemented; with Third-Party Compatibility on, those devices accept KLAP.

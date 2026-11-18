@@ -65,6 +65,10 @@ public class SceneRunnerTest {
         @Override void signal(String event, String scene, String from) {
             signals.add(event + " " + scene + (from == null ? "" : " from " + from));
         }
+        @Override void ready(String scene, String id) { signals.add("ready " + scene); }
+        int level = -1; // the TV's volume, as a paired Philips reads it
+        @Override int volume() { return level; }
+        @Override int awaitReveal(String id, int maxMs) { log.add("await reveal"); return 600; }
     }
 
     static class FakeBot extends SwitchBot {
@@ -90,7 +94,8 @@ public class SceneRunnerTest {
         Map<String, Tapo> lights = new LinkedHashMap<>();
         lights.put("Desk", new FakeLight("Desk", false));
         lights.put("LED strip", new FakeLight("LED strip", true));
-        SceneRunner r = new SceneRunner(lights, new FakeTv(), new FakeBot(), "bot1", () -> server, null, pkg -> {
+        FakeTv tv = new FakeTv();
+        SceneRunner r = new SceneRunner(lights, tv, new FakeBot(), "bot1", () -> server, null, pkg -> {
             log.add("ask " + pkg);
             return answer;
         }, () -> log.add("phone remote")) {
@@ -214,16 +219,55 @@ public class SceneRunnerTest {
         r.smooth(false);
         desk.level = -1;
 
-        // The TV hears about scenes (for the launcher's own fade): which scene, and a swap's previous one;
-        // before a scene switches it off, "tv_off", then a pause for the fade.
+        // The TV hears about scenes (for the launcher's own fade) right before the scene first changes its
+        // picture, then a pause for the fade: which scene, and a swap's previous one. Switching it off says
+        // "tv_off" instead.
         tvPower = State.ON;
         signals.clear();
         r.signal("swap", "Music");
         run(r, "Movie night: tv off; light Desk on");
-        assert signals.equals(Arrays.asList("swap Movie night from Music", "tv_off Movie night")) : signals;
+        assert signals.equals(Arrays.asList("tv_off Movie night")) : signals;
         assert log.equals(Arrays.asList("wait " + SceneRunner.FADE_MS + " ms", "tv sleep", "Desk true null null")) : log;
         signals.clear();
+        run(r, "Movie night: light Desk on; tv app com.x; keys ok");
+        assert signals.equals(Arrays.asList("swap Movie night from Music", "ready Movie night")) : signals; // once per TV
+        assert log.equals(Arrays.asList("Desk true null null", "wait " + SceneRunner.FADE_MS + " ms", "tv launch com.x", "key "
+            + Scenes.KEYS.get("ok"))) : log;
+        // From off: told before it wakes, no pause (the launcher holds its logo instead).
+        tvPower = State.OFF;
+        signals.clear();
         r.signal("start", null);
+        run(r, "Movie night: tv on; tv app com.x");
+        assert signals.equals(Arrays.asList("start Movie night", "ready Movie night")) : signals;
+        assert log.equals(Arrays.asList("tv wake", "tv launch com.x")) : log;
+        tvPower = State.ON;
+
+        // With a readable volume the sound fades with the picture: out over FADE_MS, back up over the launcher's reveal.
+        tv.level = 20;
+        signals.clear();
+        run(r, "Movie night: tv app com.x");
+        assert log.get(0).equals("wait " + SceneRunner.FADE_MS / (SceneRunner.FADE_MS / SceneRunner.VOLUME_STEP_MS) + " ms") : log;
+        int launch = log.indexOf("tv launch com.x"), reveal = log.indexOf("await reveal");
+        assert launch > 0 && log.get(launch - 1).equals("tv volume 0") : log;
+        assert reveal > launch && log.get(log.size() - 1).equals("tv volume 20") : log;
+        assert log.subList(launch, reveal).stream().noneMatch(l -> l.startsWith("tv volume")) : log;
+        // From off: silent at once (no fade), back up with the reveal.
+        tvPower = State.OFF;
+        run(r, "Movie night: tv on; tv app com.x");
+        assert log.subList(0, 3).equals(Arrays.asList("tv volume 0", "tv wake", "tv launch com.x")) : log;
+        assert log.get(log.size() - 1).equals("tv volume 20") : log;
+        // Switching it off: the sound fades out, then the level is put back for next time.
+        tvPower = State.ON;
+        run(r, "Bed: tv off");
+        assert log.get(log.size() - 2).equals("tv sleep") && log.get(log.size() - 1).equals("tv volume 20") : log;
+        assert log.contains("tv volume 0") : log;
+        tv.level = -1;
+
+        // The launcher's log line that rxhome follows for the reveal.
+        String line = "11-18 19:30:00.000  1  1 I HomeService: reveal k3x9 5000\n";
+        assert FireTv.parseReveal(line, "k3x9") == 5000 && FireTv.parseReveal(line, "other") == -1;
+
+        signals.clear();
         run(r, "Lights only: light Desk on");
         assert signals.isEmpty() : signals; // no TV in it: nothing to tell
         r.signal(null, null);
