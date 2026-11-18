@@ -125,6 +125,73 @@ final class Ui {
         else v.setAlpha(to);
     }
 
+    /** A screen's cards slide up and fade in one after another, starting after `delayMs`. */
+    static void cascade(android.view.ViewGroup g, long delayMs) {
+        if (!android.animation.ValueAnimator.areAnimatorsEnabled()) return;
+        float rise = dp(g.getContext(), 24);
+        for (int i = 0; i < g.getChildCount(); i++) {
+            View v = g.getChildAt(i);
+            v.setAlpha(0f);
+            v.setTranslationY(rise);
+            v.animate().alpha(1f).translationY(0f).setStartDelay(delayMs + i * 55L).setDuration(340)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(2f));
+        }
+    }
+
+    /** A red ring ripples out from a (power) button. */
+    static void burst(View v) {
+        if (!android.animation.ValueAnimator.areAnimatorsEnabled() || !(v.getParent() instanceof android.view.ViewGroup)) return;
+        android.view.ViewGroup parent = (android.view.ViewGroup) v.getParent();
+        GradientDrawable ring = new GradientDrawable();
+        ring.setShape(GradientDrawable.OVAL);
+        ring.setStroke(dp(v.getContext(), 3), RED);
+        ring.setBounds(v.getLeft(), v.getTop(), v.getRight(), v.getBottom());
+        parent.getOverlay().add(ring);
+        float cx = (v.getLeft() + v.getRight()) / 2f, cy = (v.getTop() + v.getBottom()) / 2f, w = v.getWidth() / 2f;
+        android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(450);
+        a.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        a.addUpdateListener(x -> {
+            float f = (float) x.getAnimatedValue(), r = w * (1f + 0.9f * f);
+            ring.setBounds((int) (cx - r), (int) (cy - r), (int) (cx + r), (int) (cy + r));
+            ring.setAlpha((int) (255 * (1f - f)));
+        });
+        a.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator x) {
+                parent.getOverlay().remove(ring);
+            }
+        });
+        a.start();
+    }
+
+    /** While something runs: a red shimmer sweeps across the view, over and over. Returns the animator to cancel. */
+    static android.animation.ValueAnimator shimmer(View v) {
+        GradientDrawable sweep = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[] {0x00FF1E3C, 0x66FF1E3C, 0x00FF1E3C});
+        v.getOverlay().add(sweep);
+        android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(-0.4f, 1f).setDuration(900);
+        a.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        a.addUpdateListener(x -> {
+            int w = v.getWidth(), x0 = (int) (w * (float) x.getAnimatedValue());
+            sweep.setBounds(x0, 0, x0 + (int) (w * 0.4f), v.getHeight());
+        });
+        a.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator x) {
+                v.getOverlay().remove(sweep);
+            }
+            @Override public void onAnimationCancel(android.animation.Animator x) {
+                v.getOverlay().remove(sweep);
+            }
+        });
+        if (android.animation.ValueAnimator.areAnimatorsEnabled()) a.start();
+        return a;
+    }
+
+    /** A quick "done" pop. */
+    static void pop(View v) {
+        v.animate().scaleX(1.06f).scaleY(1.06f).setDuration(120).withEndAction(() ->
+            v.animate().scaleX(1f).scaleY(1f).setDuration(260).setInterpolator(new android.view.animation.OvershootInterpolator(3f)));
+    }
+
     /** Pressed: shrinks a touch and springs back on release. */
     static void press(View v) {
         android.animation.StateListAnimator s = new android.animation.StateListAnimator();

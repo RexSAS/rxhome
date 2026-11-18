@@ -75,6 +75,7 @@ public class TvAppsActivity extends Activity {
         });
         pictures.execute(() -> show(claude, fetch("https://i.ytimg.com/vi/" + FireTv.claudeFmId() + "/hqdefault_live.jpg")));
 
+        Ui.cascade(col, 0); // cards rise in one after another
         ScrollView s = new ScrollView(this);
         s.addView(col);
         setContentView(s);

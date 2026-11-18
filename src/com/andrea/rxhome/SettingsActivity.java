@@ -87,6 +87,7 @@ public class SettingsActivity extends Activity {
         lp.topMargin = Ui.dp(this, 16);
         col.addView(save, lp);
 
+        Ui.cascade(col, 0); // cards rise in one after another
         ScrollView s = new ScrollView(this);
         s.addView(col);
         setContentView(s);

@@ -48,6 +48,7 @@ public class RemoteActivity extends Activity {
         TextView power = Ui.power(this);
         power.setOnClickListener(v -> {
             Ui.haptic(v);
+            Ui.burst(v);
             keys.execute(() -> {
                 try {
                     tv.togglePower(tv.state());

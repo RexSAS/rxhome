@@ -58,6 +58,7 @@ public class MainActivity extends Activity {
         cfg = new Config(this);
         splashPending = state == null; // a fresh start, not a rotation or a return
         setContentView(build()); // once: coming back only redraws what changed (renderParts)
+        Ui.cascade(homeCol, splashPending ? Splash.DRAW_MS : 0); // cards rise in as the splash ends
         if (checkSelfPermission(Vpn.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Vpn.PERMISSION}, 1); // lets rxhome switch on the WireGuard tunnel
         }
@@ -88,7 +89,7 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private LinearLayout lightsSlot, scenesSlot;
+    private LinearLayout lightsSlot, scenesSlot, homeCol;
     private String shownLights, shownScenes;
 
     /** Redraws the lights card and the scenes only when their settings changed (keeps scroll, no flash). */
@@ -121,6 +122,7 @@ public class MainActivity extends Activity {
         scenesSlot.setOrientation(LinearLayout.VERTICAL);
         col.addView(scenesSlot);
         Ui.animateLayout(col);
+        homeCol = col;
         shownLights = shownScenes = null;
         renderParts();
         ScrollView s = new ScrollView(this);
@@ -231,6 +233,7 @@ public class MainActivity extends Activity {
 
     private void serverPower(View v) {
         Ui.haptic(v);
+        Ui.burst(v);
         SwitchBot sb = cfg.switchBot();
         String bot = cfg.get(Config.SB_BOT);
         if (sb == null || bot.isEmpty()) {
@@ -306,6 +309,7 @@ public class MainActivity extends Activity {
 
     private void tvPower(View v) {
         Ui.haptic(v);
+        Ui.burst(v);
         tvStatus.setText("…");
         FireTv tv = cfg.tv();
         io.execute(() -> {
@@ -603,6 +607,7 @@ public class MainActivity extends Activity {
         Ui.haptic(b);
         b.setEnabled(false);
         b.setText("Running…");
+        android.animation.ValueAnimator shimmer = Ui.shimmer(b);
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
             () -> Server.effective(Server.status(server, pub), Metrics.fetch(metricsUrl(server)) != null),
@@ -610,6 +615,8 @@ public class MainActivity extends Activity {
         io.execute(() -> {
             int[] r = runner.run(scene);
             ui(() -> {
+                shimmer.cancel();
+                Ui.pop(b);
                 b.setText(r[0] == r[1] ? "Done" : r[0] + "/" + r[1] + " done");
                 main.postDelayed(() -> { b.setText(scene.name); b.setEnabled(true); }, 3000);
                 refresh();

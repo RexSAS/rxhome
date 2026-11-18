@@ -88,6 +88,7 @@ public class SceneEditorActivity extends Activity {
         actions.addView(save, new LinearLayout.LayoutParams(0, -2, 1));
         col.addView(actions);
 
+        Ui.cascade(col, 0); // cards rise in one after another
         ScrollView s = new ScrollView(this);
         s.addView(col);
         setContentView(s);
