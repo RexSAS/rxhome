@@ -167,7 +167,8 @@ public class MainActivity extends Activity {
         text.setOrientation(LinearLayout.VERTICAL);
         text.addView(Ui.text(this, "rexserver", 18, Ui.TEXT, true));
         serverStatus = Ui.text(this, "", 13, Ui.DIM, false);
-        text.addView(serverStatus);
+        serverRing = new StatusRing(this);
+        text.addView(statusLine(serverRing, serverStatus));
         serverStats = Ui.text(this, "", 13, Ui.TEXT, false);
         serverStats.setFontFeatureSettings("tnum");
         text.addView(serverStats);
@@ -202,6 +203,19 @@ public class MainActivity extends Activity {
         paintServer();
     }
 
+    private StatusRing serverRing, tvRing;
+
+    /** A status ring, then its text. */
+    private LinearLayout statusLine(StatusRing ring, TextView status) {
+        LinearLayout line = new LinearLayout(this);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.rightMargin = Ui.dp(this, 8);
+        line.addView(ring, lp);
+        line.addView(status, new LinearLayout.LayoutParams(0, -2, 1));
+        return line;
+    }
+
     private void paintServer() {
         if (openJellyfin == null) return; // the card is still being built (remembered stats come first)
         State s = shownServer;
@@ -209,9 +223,12 @@ public class MainActivity extends Activity {
         openJellyfin.setVisibility(s == State.ON && serverFresh && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
             ? View.VISIBLE : View.GONE);
         String label = Server.label(s, statsSeen, homeSeen);
-        serverStatus.setText(label.equals("online") ? "● ONLINE" : label.equals("starting") ? "◐ STARTING…"
-            : label.equals("off") ? "○ OFF" : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
-        serverStatus.setTextColor(label.equals("online") ? Ui.RED : label.equals("starting") ? Ui.TEXT : Ui.DIM);
+        serverStatus.setText(label.equals("online") ? "ONLINE" : label.equals("starting") ? "STARTING…"
+            : label.equals("off") ? "OFF" : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
+        serverStatus.setTextColor(label.equals("online") ? Ui.GREEN : label.equals("off") ? Ui.RED
+            : label.equals("starting") ? Ui.TEXT : Ui.DIM);
+        serverRing.set(label.equals("online") ? StatusRing.ON : label.equals("off") ? StatusRing.OFF
+            : label.equals("starting") || vpnNote != null && vpnNote.startsWith("Away") ? StatusRing.BUSY : StatusRing.UNKNOWN);
         Ui.reachable(serverStatus, !label.equals("unknown"));
     }
 
@@ -277,7 +294,8 @@ public class MainActivity extends Activity {
         text.setOrientation(LinearLayout.VERTICAL);
         text.addView(Ui.text(this, "Tv", 18, Ui.TEXT, true));
         tvStatus = Ui.text(this, "", 13, Ui.DIM, false);
-        text.addView(tvStatus);
+        tvRing = new StatusRing(this);
+        text.addView(statusLine(tvRing, tvStatus));
         row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
         TextView power = Ui.power(this);
         power.setOnClickListener(this::tvPower);
@@ -304,7 +322,8 @@ public class MainActivity extends Activity {
         boolean paired = cfg.philips() != null; // then the state is the TV's own, else the FireStick's
         Ui.setText(tvStatus, s == State.ON ? (paired ? "On" : "On · FireStick")
             : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);
-        tvStatus.setTextColor(Ui.DIM);
+        tvStatus.setTextColor(s == State.ON ? Ui.GREEN : s == State.OFF ? Ui.RED : Ui.DIM);
+        tvRing.set(s == State.ON ? StatusRing.ON : s == State.OFF ? StatusRing.OFF : StatusRing.UNKNOWN);
         Ui.reachable(tvTile, s != State.UNREACHABLE);
     }
 

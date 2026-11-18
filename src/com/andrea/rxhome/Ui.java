@@ -17,7 +17,7 @@ import android.widget.TextView;
 final class Ui {
 
     static final int BG = 0xff0c0c0e, TILE = 0xff18181c, BUTTON = 0xff232328, RED = 0xffff1e3c,
-        TEXT = 0xffececf0, DIM = 0xff9a9aa6;
+        TEXT = 0xffececf0, DIM = 0xff9a9aa6, GREEN = 0xff2ee59d;
 
     private static Typeface regular, semibold;
 
