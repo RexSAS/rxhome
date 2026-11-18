@@ -107,12 +107,18 @@ public class TunnelWatch extends Service {
     private void recheck() {
         boolean front = oursInFront();
         boolean vpn = vpnActive();
-        String server = cfg.get(Config.SERVER), stick = cfg.get(Config.FIRETV);
+        java.util.List<String> home = cfg.homeDevices();
+        try {
+            URL u = new URL(cfg.get(Config.SERVER));
+            home.add(u.getHost() + ":" + (u.getPort() > 0 ? u.getPort() : 80));
+        } catch (Exception e) {
+            // No server address: the other devices still tell.
+        }
         io.execute(() -> {
-            boolean srv = answers(server), st = answers("http://" + stick + ":5555");
+            boolean h = Discovery.anyAnswers(home, 1500);
             main.post(() -> {
-                System.err.println("rxhome-vpn: home answers: server " + srv + ", FireStick " + st);
-                if (Vpn.wantUp(srv, st, front, vpn)) up();
+                System.err.println("rxhome-vpn: home answers: " + h);
+                if (Vpn.wantUp(h, front, vpn)) up();
             });
         });
     }

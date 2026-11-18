@@ -110,9 +110,12 @@ public class FireTvTest {
         assert FireTv.parseAwake("  mWakefulness=Dozing\n") == State.OFF;
 
         // Stats answer but Jellyfin doesn't yet: the server is booting.
-        assert Server.label(State.ON, true).equals("online") && Server.label(State.ON, false).equals("online");
-        assert Server.label(State.UNREACHABLE, true).equals("starting");
-        assert Server.label(State.UNREACHABLE, false).equals("unknown");
+        assert Server.label(State.ON, true, true).equals("online") && Server.label(State.ON, false, false).equals("online");
+        assert Server.label(State.UNREACHABLE, true, false).equals("starting");
+        // Home devices answer (home Wi-Fi or the tunnel) but the server doesn't: it's off.
+        assert Server.label(State.UNREACHABLE, false, true).equals("off");
+        // Nothing at home answers: can't tell.
+        assert Server.label(State.UNREACHABLE, false, false).equals("unknown");
         // For "server must be on": starting counts as on (pressing now would switch it off mid-boot).
         assert Server.effective(State.UNREACHABLE, true) == State.ON;
         assert Server.effective(State.UNREACHABLE, false) == State.UNREACHABLE;

@@ -91,6 +91,38 @@ final class Discovery {
         }
     }
 
+    /** True as soon as any "host:port" accepts a connection (all tried in parallel); false if none does. */
+    static boolean anyAnswers(List<String> hostPorts, int timeoutMs) {
+        if (hostPorts.isEmpty()) return false;
+        ExecutorService pool = Executors.newFixedThreadPool(hostPorts.size());
+        java.util.concurrent.ExecutorCompletionService<Boolean> done = new java.util.concurrent.ExecutorCompletionService<>(pool);
+        try {
+            for (String hp : hostPorts) {
+                int c = hp.lastIndexOf(':');
+                String host = hp.substring(0, c);
+                int port = Integer.parseInt(hp.substring(c + 1));
+                done.submit(() -> {
+                    try (Socket s = new Socket()) {
+                        s.connect(new InetSocketAddress(host, port), timeoutMs);
+                        return true;
+                    } catch (IOException e) {
+                        return false;
+                    }
+                });
+            }
+            for (int i = 0; i < hostPorts.size(); i++) {
+                try {
+                    if (done.take().get()) return true;
+                } catch (Exception e) {
+                    // That one counts as silent.
+                }
+            }
+            return false;
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     static boolean isJellyfin(String base) {
         return fetch(base + "/System/Info/Public").contains("Jellyfin");
     }

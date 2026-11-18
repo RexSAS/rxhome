@@ -12,10 +12,11 @@ final class Server {
 
     /**
      * What the card says: Jellyfin answering = "online"; only the stats (node_exporter starts early in
-     * boot, Jellyfin later) = "starting"; neither = "unknown" (off, or out of reach).
+     * boot, Jellyfin later) = "starting"; neither while home devices answer = "off"; nothing answers = "unknown".
      */
-    static String label(State jellyfin, boolean statsSeen) {
-        return jellyfin == State.ON ? "online" : statsSeen ? "starting" : "unknown";
+    static String label(State jellyfin, boolean statsSeen, boolean homeSeen) {
+        // homeSeen: other home devices answer (home Wi-Fi or the tunnel), so a silent server is really off.
+        return jellyfin == State.ON ? "online" : statsSeen ? "starting" : homeSeen ? "off" : "unknown";
     }
 
     /** For "server must be on": a starting server counts as on, so its power button isn't pressed mid-boot. */

@@ -3,16 +3,13 @@ package com.andrea.rxhome;
 public class VpnTest {
     public static void main(String[] a) {
         long now = 1_000_000;
-        // Away from home: neither the server nor the FireStick answers → bring the tunnel up.
-        assert Vpn.shouldStart(State.UNREACHABLE, State.UNREACHABLE, now, 0);
-        // At home with the server down: the stick answers, a tunnel wouldn't help.
-        assert !Vpn.shouldStart(State.UNREACHABLE, State.ON, now, 0);
-        assert !Vpn.shouldStart(State.UNREACHABLE, State.OFF, now, 0);
-        // Server reachable (home, or the tunnel is already up): nothing to do.
-        assert !Vpn.shouldStart(State.ON, State.UNREACHABLE, now, 0);
+        // Away = nothing at home answers (FireStick, TV, lights). At home with the server off: no tunnel.
+        assert Vpn.shouldStart(false, false, now, 0);
+        assert !Vpn.shouldStart(true, false, now, 0);   // home devices answer: we're home
+        assert !Vpn.shouldStart(false, true, now, 0);   // the server answers (home, or tunnel already up)
         // At most once a minute, so a tunnel that can't connect isn't hammered.
-        assert !Vpn.shouldStart(State.UNREACHABLE, State.UNREACHABLE, now, now - 30_000);
-        assert Vpn.shouldStart(State.UNREACHABLE, State.UNREACHABLE, now, now - 61_000);
+        assert !Vpn.shouldStart(false, false, now, now - 30_000);
+        assert Vpn.shouldStart(false, false, now, now - 61_000);
         assert Vpn.TUNNEL.equals("rxfilms");
 
         // Auto-off: the tunnel stays while rxhome or Jellyfin is in front (screen on).
@@ -24,12 +21,11 @@ public class VpnTest {
         assert Vpn.shouldStop(now - 11_000, now);
         assert Vpn.JELLYFIN.equals("org.jellyfin.mobile");
 
-        // After a Wi-Fi change (rxhome's tunnel dropped first): up again only if home is out of reach,
+        // After a Wi-Fi change (rxhome's tunnel dropped first): up again only if nothing at home answers,
         // you're in rxhome or Jellyfin, and no VPN is up already.
-        assert Vpn.wantUp(false, false, true, false);
-        assert !Vpn.wantUp(true, false, true, false);   // server answers: home Wi-Fi
-        assert !Vpn.wantUp(false, true, true, false);   // FireStick answers: home Wi-Fi
-        assert !Vpn.wantUp(false, false, false, false); // not in rxhome or Jellyfin
-        assert !Vpn.wantUp(false, false, true, true);   // a VPN is already up
+        assert Vpn.wantUp(false, true, false);
+        assert !Vpn.wantUp(true, true, false);   // home answers: home Wi-Fi
+        assert !Vpn.wantUp(false, false, false); // not in rxhome or Jellyfin
+        assert !Vpn.wantUp(false, true, true);   // a VPN is already up
     }
 }

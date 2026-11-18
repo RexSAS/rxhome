@@ -1,9 +1,8 @@
 package com.andrea.rxhome;
 
 /**
- * When to switch on the WireGuard tunnel home ("rxfilms"): only away from home, i.e. when neither the
- * server nor the FireStick answers (if the stick answers we're home and a tunnel wouldn't help), and at
- * most once a minute. Sending it is MainActivity's job (an Android broadcast to the WireGuard app).
+ * When to switch on the WireGuard tunnel home ("rxfilms"): only away from home, i.e. when nothing at
+ * home answers (FireStick, TV, lights; the server may just be off), and at most once a minute. Sending it is MainActivity's job (an Android broadcast to the WireGuard app).
  */
 final class Vpn {
 
@@ -24,8 +23,8 @@ final class Vpn {
     }
 
     /** After a Wi-Fi change: bring the tunnel up only if home is out of reach while you're in our apps. */
-    static boolean wantUp(boolean serverAnswers, boolean stickAnswers, boolean oursInFront, boolean vpnUp) {
-        return !serverAnswers && !stickAnswers && oursInFront && !vpnUp;
+    static boolean wantUp(boolean homeAnswers, boolean oursInFront, boolean vpnUp) {
+        return !homeAnswers && oursInFront && !vpnUp;
     }
 
     /** Off after GRACE_MS without rxhome or Jellyfin in front, so a quick hop elsewhere doesn't drop it. */
@@ -33,7 +32,7 @@ final class Vpn {
         return now - lastSeenOurs > GRACE_MS;
     }
 
-    static boolean shouldStart(State server, State stick, long now, long lastTry) {
-        return server == State.UNREACHABLE && stick == State.UNREACHABLE && now - lastTry >= RETRY_MS;
+    static boolean shouldStart(boolean homeSeen, boolean serverOn, long now, long lastTry) {
+        return !homeSeen && !serverOn && now - lastTry >= RETRY_MS;
     }
 }

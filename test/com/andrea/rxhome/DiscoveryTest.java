@@ -20,6 +20,15 @@ public class DiscoveryTest {
             assert System.currentTimeMillis() - t0 < 3000;
         }
 
+        // "Is anything at home there?": any one of several host:port answering, quickly.
+        try (ServerSocket open = new ServerSocket(0)) {
+            long t0 = System.currentTimeMillis();
+            assert Discovery.anyAnswers(Arrays.asList("127.0.0.1:9", "127.0.0.1:" + open.getLocalPort()), 800);
+            assert !Discovery.anyAnswers(Arrays.asList("127.0.0.1:9", "192.168.1.250:80"), 800);
+            assert !Discovery.anyAnswers(Arrays.<String>asList(), 800);
+            assert System.currentTimeMillis() - t0 < 3000 : System.currentTimeMillis() - t0;
+        }
+
         // Identifying what answers: Jellyfin and the Philips by their own info pages.
         com.sun.net.httpserver.HttpServer fake = com.sun.net.httpserver.HttpServer.create(
             new java.net.InetSocketAddress("127.0.0.1", 0), 0);

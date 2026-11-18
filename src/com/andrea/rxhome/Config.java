@@ -86,6 +86,15 @@ final class Config {
         return changed;
     }
 
+    /** Devices that are on whenever home is reachable (not the server: it may be off), as "host:port". */
+    java.util.List<String> homeDevices() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        out.add(get(FIRETV) + ":5555");
+        out.add(get(PHILIPS_IP) + ":1925");
+        for (String ip : Scenes.lights(get(LIGHTS)).values()) out.add(ip + ":80");
+        return out;
+    }
+
     /** For Settings: where things were found. */
     String foundLine() {
         return "Found on this Wi-Fi: server " + get(SERVER).replace("http://", "") + " · FireStick " + get(FIRETV)

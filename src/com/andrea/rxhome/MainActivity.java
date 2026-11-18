@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     private final Confirm serverConfirm = new Confirm();
     // This refresh's server and FireStick results: both unreachable = away → WireGuard (see Vpn).
     private State genServer, genStick;
+    private Boolean genHome; // any home device answered this refresh
     private long vpnTriedAt, scannedAt;
     private String vpnNote; // shown on the server card while WireGuard connects, or why it didn't
     private final Map<String, LightRow> rows = new LinkedHashMap<>();
@@ -154,6 +155,7 @@ public class MainActivity extends Activity {
     }
 
     private State shownServer = State.UNREACHABLE;
+    private boolean homeSeen; // other home devices answer: a silent server is off, not unknown
     private boolean statsSeen; // fresh stats this refresh (not the remembered ones): with Jellyfin silent = starting
 
     private void showServer(State s, boolean fresh) {
@@ -168,9 +170,9 @@ public class MainActivity extends Activity {
         if (s == State.ON) vpnNote = null;
         openJellyfin.setVisibility(s == State.ON && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
             ? View.VISIBLE : View.GONE);
-        String label = Server.label(s, statsSeen);
+        String label = Server.label(s, statsSeen, homeSeen);
         serverStatus.setText(label.equals("online") ? "● ONLINE" : label.equals("starting") ? "◐ STARTING…"
-            : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
+            : label.equals("off") ? "○ OFF" : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
         serverStatus.setTextColor(label.equals("online") ? Ui.RED : label.equals("starting") ? Ui.TEXT : Ui.DIM);
         Ui.reachable(serverStatus, !label.equals("unknown"));
     }
@@ -586,7 +588,19 @@ public class MainActivity extends Activity {
     private void refresh() {
         int gen = ++generation;
         genServer = genStick = null;
+        genHome = null;
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
+        java.util.List<String> home = cfg.homeDevices();
+        io.execute(() -> {
+            boolean h = Discovery.anyAnswers(home, 1500);
+            ui(() -> {
+                if (gen != generation) return;
+                genHome = h;
+                homeSeen = h;
+                paintServer();
+                afterChecks();
+            });
+        });
         io.execute(() -> {
             State s = Server.status(server, pub);
             ui(() -> {
@@ -637,7 +651,7 @@ public class MainActivity extends Activity {
      * once a minute) and refresh if found. Nothing new: maybe we're away, so WireGuard (maybeVpn).
      */
     private void afterChecks() {
-        if (genServer == null || genStick == null) return;
+        if (genServer == null || genStick == null || genHome == null) return;
         long now = android.os.SystemClock.elapsedRealtime();
         boolean missing = genServer == State.UNREACHABLE || genStick == State.UNREACHABLE;
         if (missing && now - scannedAt > 60_000) {
@@ -659,7 +673,7 @@ public class MainActivity extends Activity {
     /** Away from home (server and FireStick both silent): switch on the "rxfilms" WireGuard tunnel. */
     private void maybeVpn(State server, State stick) {
         long now = android.os.SystemClock.elapsedRealtime();
-        if (!Vpn.shouldStart(server, stick, now, vpnTriedAt)) return;
+        if (!Vpn.shouldStart(Boolean.TRUE.equals(genHome), server == State.ON, now, vpnTriedAt)) return;
         vpnTriedAt = now;
         if (checkSelfPermission(Vpn.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Vpn.PERMISSION}, 1);
