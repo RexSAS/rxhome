@@ -119,6 +119,12 @@ public class SceneRunnerTest {
         answer = "djx";
         run(r, "X: tv app com.spotify.tv.android ask");
         assert log.equals(Arrays.asList("ask com.spotify.tv.android", "tv view spotify:playlist:37i9dQZF1EYkqdzj48dyYq")) : log;
+        // "Choose when run" asks as soon as the scene starts; the pick waits for its step's turn.
+        tvPower = State.OFF;
+        run(r, "X: tv on; wait 5; tv app com.spotify.tv.android ask");
+        assert log.equals(Arrays.asList("ask com.spotify.tv.android", "tv wake", "wait 5",
+            "tv view spotify:playlist:37i9dQZF1EYkqdzj48dyYq")) : log;
+        tvPower = State.ON;
         answer = "item:0f3a9b6c1d2e4f5a8b7c6d5e4f3a2b1c"; // a Continue watching / Next up item picked on the card
         run(r, "X: tv app org.rxfilms.tv ask");
         assert log.equals(Arrays.asList("ask org.rxfilms.tv", "tv item 0f3a9b6c1d2e4f5a8b7c6d5e4f3a2b1c")) : log;
