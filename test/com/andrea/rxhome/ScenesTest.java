@@ -5,6 +5,15 @@ import java.util.Arrays;
 import java.util.List;
 
 public class ScenesTest {
+    static String undo(String scene) throws Exception {
+        StringBuilder s = new StringBuilder();
+        for (String[] step : Scenes.undo(Scenes.parse(scene).get(0)).steps) {
+            if (s.length() > 0) s.append("; ");
+            s.append(Scenes.formatStep(step));
+        }
+        return s.toString();
+    }
+
     public static void main(String[] a) throws Exception {
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
         assert s.size() == 4 : s.size();
@@ -98,6 +107,17 @@ public class ScenesTest {
         assert Scenes.parse("A: music Cucina; music \"Echo Dot\"").get(0).steps.size() == 2;
         failsOnLine("A: music", 1);
         assert Scenes.describe(new String[] {"music", "Cucina"}).equals("Music → Cucina");
+
+        // Tapping an active scene again turns off what it turned on: music first, then the TV, then the
+        // lights it left on. The server, waits, keys, volume and app steps are left alone.
+        assert undo("Movie night: light all on 20; tv on; wait 5; tv app org.rxfilms.tv; server on")
+            .equals("tv off; light all off") : undo("M: light all on 20; tv on");
+        assert undo("M: light Desk on 60 warm; light \"LED strip\" on 30 color:200,50; music Cucina; tv on; tv volume 20")
+            .equals("music-pause; tv off; light Desk off; light \"LED strip\" off") : undo("M: light Desk on; music Cucina");
+        assert undo("M: light Desk on; light Desk off; tv on; tv off").isEmpty();       // left off: nothing to undo
+        assert undo("M: tv off; tv on; light Desk off; light Desk on 50").equals("tv off; light Desk off");
+        assert undo("All off: tv off; light all off; server off").isEmpty();
+        assert undo("M: tv app org.rxfilms.tv; keys home; phone remote; wait 3; server press").isEmpty();
 
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");

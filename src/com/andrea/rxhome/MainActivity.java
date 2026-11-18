@@ -743,22 +743,27 @@ public class MainActivity extends Activity {
 
     // --- music (Spotify) ---
 
-    private TextView nowPlaying;
-    private LinearLayout speakers;
+    private TextView nowPlaying, speakersButton;
+    private List<Spotify.Device> lastDevices = new ArrayList<>();
 
-    /** What's playing and a chip per speaker on Spotify: tapping one moves the music there. */
+    /** What's playing, the controls, and (top right) where it plays: tap it to move the music. */
     private View musicTile() {
         LinearLayout tile = Ui.tile(this);
-        tile.addView(Ui.text(this, "Music", 18, Ui.TEXT, true));
+        LinearLayout head = new LinearLayout(this);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.addView(Ui.text(this, "Music", 18, Ui.TEXT, true), new LinearLayout.LayoutParams(0, -2, 1));
+        speakersButton = Ui.button(this, "🔊 Speakers", false);
+        speakersButton.setTextSize(13);
+        speakersButton.setSingleLine(true);
+        speakersButton.setMaxWidth(Ui.dp(this, 200));
+        speakersButton.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        speakersButton.setContentDescription("Speakers: choose where the music plays");
+        speakersButton.setOnClickListener(v -> showSpeakers());
+        head.addView(speakersButton);
+        tile.addView(head);
         nowPlaying = Ui.text(this, "Checking Spotify…", 13, Ui.DIM, false);
+        nowPlaying.setPadding(0, Ui.dp(this, 6), 0, 0);
         tile.addView(nowPlaying);
-        speakers = new LinearLayout(this);
-        android.widget.HorizontalScrollView sc = new android.widget.HorizontalScrollView(this);
-        sc.setHorizontalScrollBarEnabled(false);
-        sc.addView(speakers);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = Ui.dp(this, 10);
-        tile.addView(sc, lp);
 
         // ⏮ ⏯ ⏭, then the playing speaker's volume; shown once something is playing.
         controls = new LinearLayout(this);
@@ -875,41 +880,114 @@ public class MainActivity extends Activity {
         playPause.setContentDescription(playingNow ? "Pause" : "Play");
         volume.setVisibility(p != null && p.volume >= 0 ? View.VISIBLE : View.GONE);
         if (p != null && p.volume >= 0 && !volume.isPressed()) volume.setProgress(p.volume);
-        speakers.removeAllViews();
+        lastDevices = ds;
+        Spotify.Device active = null;
         StringBuilder seen = new StringBuilder();
         for (Spotify.Device d : ds) {
             seen.append(d.name).append('\n');
-            String label = Spotify.label(names, d.name);
-            TextView chip = Ui.button(this, label, d.active);
-            chip.setTextSize(13);
-            chip.setContentDescription("Move music to " + label + (d.active ? ", playing here" : "") + ". Hold to rename");
-            chip.setOnClickListener(v -> moveMusic(chip, d));
-            chip.setOnLongClickListener(v -> {
-                Ui.haptic(v);
-                renameSpeaker(d.name);
-                return true;
-            });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.rightMargin = Ui.dp(this, 8);
-            speakers.addView(chip, lp);
+            if (d.active) active = d;
         }
-        if (ds.isEmpty()) {
-            speakers.addView(Ui.text(this, "No speakers on Spotify right now: play Spotify on one once and it shows up", 13, Ui.DIM, false));
-        } else {
-            cfg.put(Config.SPOTIFY_SPEAKERS, seen.toString().trim()); // for the scene editor's speaker chips
+        if (!ds.isEmpty()) cfg.put(Config.SPOTIFY_SPEAKERS, seen.toString().trim()); // for the scene editor
+        speakersButton.setText("🔊 " + (active == null ? "Speakers" : Spotify.label(names, active.name)));
+        Ui.style(speakersButton, active != null);
+    }
+
+    /** A place the music can go: a Spotify speaker, or this phone (its speaker or what's connected to it). */
+    private static final class Target {
+        final String key, label; // key: the name renames are kept under
+        final Spotify.Device device; // null = this phone
+        final boolean active;
+
+        Target(String key, String label, Spotify.Device device, boolean active) {
+            this.key = key;
+            this.label = label;
+            this.device = device;
+            this.active = active;
         }
     }
 
-    private void moveMusic(TextView chip, Spotify.Device d) {
+    private String phoneName() {
+        String n = android.provider.Settings.Global.getString(getContentResolver(), "device_name");
+        return n == null || n.trim().isEmpty() ? android.os.Build.MODEL : n.trim();
+    }
+
+    /** Bluetooth / wired speakers and headphones connected to the phone, by name. */
+    private List<String> phoneOutputs() {
+        List<String> out = new ArrayList<>();
+        android.media.AudioManager am = (android.media.AudioManager) getSystemService(AUDIO_SERVICE);
+        for (android.media.AudioDeviceInfo d : am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)) {
+            int t = d.getType();
+            boolean wired = t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES || t == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET
+                || t == android.media.AudioDeviceInfo.TYPE_USB_HEADSET;
+            boolean bt = t == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || t == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET
+                || t == android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER;
+            if (!wired && !bt) continue;
+            CharSequence pn = d.getProductName();
+            String name = pn == null || pn.toString().trim().isEmpty() || wired && pn.toString().equals(android.os.Build.MODEL)
+                ? (wired ? "Headphones" : "Bluetooth audio") : pn.toString().trim();
+            if (!out.contains(name)) out.add(name);
+        }
+        return out;
+    }
+
+    /** The speakers: tap = the music goes there, hold = rename. */
+    private void showSpeakers() {
+        Ui.haptic(speakersButton);
+        String names = cfg.get(Config.SPEAKER_NAMES), me = phoneName();
+        Spotify.Device phone = Spotify.phone(lastDevices, me);
+        List<Target> targets = new ArrayList<>();
+        for (Spotify.Device d : lastDevices) {
+            if (d != phone) targets.add(new Target(d.name, Spotify.label(names, d.name), d, d.active));
+        }
+        boolean phoneActive = phone != null && phone.active;
+        List<String> outs = phoneOutputs();
+        // With something connected, Android plays the phone's music there, not on its own speaker.
+        targets.add(new Target(me, Spotify.label(names, me) + (outs.isEmpty() ? " (this phone)" : " (phone speaker)"),
+            null, phoneActive && outs.isEmpty()));
+        for (String o : outs) targets.add(new Target(o, Spotify.label(names, o) + " · on the phone", null, phoneActive));
+        String[] labels = new String[targets.size()];
+        for (int i = 0; i < labels.length; i++) labels[i] = (targets.get(i).active ? "● " : "   ") + targets.get(i).label;
+        AlertDialog dialog = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Play on")
+            .setItems(labels, (d, w) -> moveMusic(targets.get(w)))
+            .setNegativeButton("Close", null)
+            .create();
+        dialog.setOnShowListener(d -> dialog.getListView().setOnItemLongClickListener((parent, view, pos, id) -> {
+            dialog.dismiss();
+            renameSpeaker(targets.get(pos).key);
+            return true;
+        }));
+        dialog.show();
+        if (lastDevices.isEmpty()) toast("Speakers show up here once Spotify has played on them");
+    }
+
+    private void moveMusic(Target t) {
         Spotify sp = cfg.spotify();
         if (sp == null) return;
-        Ui.haptic(chip);
-        chip.setText("Moving…");
+        speakersButton.setText("🔊 Moving…");
+        String me = phoneName();
         io.execute(() -> {
             try {
+                Spotify.Device d = t.device;
+                if (d == null) {
+                    d = Spotify.phone(sp.devices(), me);
+                    if (d == null) {
+                        // Spotify on the phone is closed, so Spotify doesn't list it: open it, wait for it.
+                        Intent open = getPackageManager().getLaunchIntentForPackage("com.spotify.music");
+                        if (open == null) throw new IOException("Install Spotify on the phone first");
+                        ui(() -> startActivity(open));
+                        for (int i = 0; i < 10 && d == null; i++) {
+                            Thread.sleep(1000);
+                            d = Spotify.phone(sp.devices(), me);
+                        }
+                        if (d == null) throw new IOException("Spotify on the phone didn't show up: try again");
+                    }
+                }
                 sp.transfer(d.id);
             } catch (IOException e) {
                 ui(() -> toast(e.getMessage()));
+            } catch (InterruptedException e) {
+                return;
             }
             ui(() -> main.postDelayed(this::loadMusic, 1500)); // Spotify takes a moment to switch
         });
@@ -917,7 +995,21 @@ public class MainActivity extends Activity {
 
     // --- scenes ---
 
+    private final Map<String, TextView> sceneButtons = new java.util.HashMap<>();
+
+    private java.util.Set<String> activeScenes() {
+        java.util.Set<String> s = new java.util.LinkedHashSet<>();
+        for (String n : cfg.get(Config.SCENES_ACTIVE).split("\n")) if (!n.trim().isEmpty()) s.add(n.trim());
+        return s;
+    }
+
+    private void saveActive(java.util.Set<String> s) {
+        cfg.put(Config.SCENES_ACTIVE, String.join("\n", s));
+        for (Map.Entry<String, TextView> e : sceneButtons.entrySet()) Ui.style(e.getValue(), s.contains(e.getKey()));
+    }
+
     private View scenes() {
+        sceneButtons.clear();
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         List<Scenes.Scene> list;
@@ -936,7 +1028,9 @@ public class MainActivity extends Activity {
                 col.addView(row, rp);
             }
             Scenes.Scene scene = list.get(i);
-            TextView b = Ui.button(this, scene.name, i == 0);
+            boolean toggle = !Scenes.undo(scene).steps.isEmpty();
+            TextView b = Ui.button(this, scene.name, toggle && activeScenes().contains(scene.name));
+            sceneButtons.put(scene.name, b);
             b.setMinHeight(Ui.dp(this, 64));
             b.setOnClickListener(v -> runScene(b, scene));
             // Own height (min 64 dp), not the row's: an odd last row holds only this and an empty
@@ -994,7 +1088,12 @@ public class MainActivity extends Activity {
         if (!b.isEnabled()) return;
         Ui.haptic(b);
         b.setEnabled(false);
-        b.setText("Running…");
+        // A scene that switches things on is a toggle: tapped while active, it switches them off instead.
+        // One that only switches things off (All off) is a plain button and clears every active scene.
+        Scenes.Scene off = Scenes.undo(scene);
+        boolean toggle = !off.steps.isEmpty(), turningOff = toggle && activeScenes().contains(scene.name);
+        Scenes.Scene todo = turningOff ? off : scene;
+        b.setText(turningOff ? "Turning off…" : "Running…");
         android.animation.ValueAnimator shimmer = Ui.shimmer(b);
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
@@ -1002,11 +1101,16 @@ public class MainActivity extends Activity {
             cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))))
             .music(cfg.spotify());
         io.execute(() -> {
-            int[] r = runner.run(scene);
+            int[] r = runner.run(todo);
             ui(() -> {
                 shimmer.cancel();
                 Ui.pop(b);
-                b.setText(r[0] == r[1] ? "Done" : r[0] + "/" + r[1] + " done");
+                java.util.Set<String> act = activeScenes();
+                if (!toggle) act.clear();
+                else if (turningOff) act.remove(scene.name);
+                else act.add(scene.name);
+                saveActive(act);
+                b.setText(r[0] == r[1] ? (turningOff ? "Off" : "Done") : r[0] + "/" + r[1] + " done");
                 main.postDelayed(() -> { b.setText(scene.name); b.setEnabled(true); }, 3000);
                 refresh();
             });

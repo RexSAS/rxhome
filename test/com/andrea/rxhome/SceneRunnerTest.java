@@ -62,6 +62,7 @@ public class SceneRunnerTest {
             return Arrays.asList(new Spotify.Device("d1", "Cucina", "Speaker", false), new Spotify.Device("d2", "Echo Dot", "Speaker", true));
         }
         @Override void transfer(String id) { log.add("spotify " + id); }
+        @Override void pause() { log.add("spotify pause"); }
     }
 
     static int[] run(SceneRunner r, String scene) throws Exception {
@@ -174,6 +175,10 @@ public class SceneRunnerTest {
         r.music(new FakeSpotify());
         assert Arrays.equals(run(r, "X: music cucina"), new int[] {1, 1}) && log.equals(Arrays.asList("spotify d1")) : log;
         assert Arrays.equals(run(r, "X: music Bagno"), new int[] {0, 1}) && log.isEmpty() : log;
+        // Turning a scene off pauses its music.
+        log.clear();
+        assert Arrays.equals(r.run(Scenes.undo(Scenes.parse("X: music Cucina; light Desk on").get(0))), new int[] {2, 2}) : log;
+        assert log.equals(Arrays.asList("spotify pause", "Desk false null null")) : log;
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));

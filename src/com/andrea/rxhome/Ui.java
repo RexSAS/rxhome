@@ -87,7 +87,7 @@ final class Ui {
         return b;
     }
 
-    /** Restyles a button as primary (red) or not, keeping its padding. */
+    /** Switches a button() between its normal and red look (e.g. an active scene). */
     static void style(TextView b, boolean primary) {
         TextView fresh = button(b.getContext(), "", primary);
         int l = b.getPaddingLeft(), t = b.getPaddingTop(), r = b.getPaddingRight(), bo = b.getPaddingBottom();

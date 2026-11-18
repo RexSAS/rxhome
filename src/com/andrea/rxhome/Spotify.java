@@ -316,6 +316,18 @@ class Spotify {
         return s.toString();
     }
 
+    /** This phone in Spotify's list: the device with its name, else the only smartphone; null if unsure. */
+    static Device phone(List<Device> devices, String phoneName) {
+        Device named = find(devices, phoneName), only = null;
+        if (named != null) return named;
+        for (Device d : devices) {
+            if (!d.type.equalsIgnoreCase("Smartphone")) continue;
+            if (only != null) return null; // more than one: can't tell which is this one
+            only = d;
+        }
+        return only;
+    }
+
     static Device find(List<Device> devices, String name) {
         for (Device d : devices) if (d.name.trim().equalsIgnoreCase(name.trim())) return d;
         return null;
