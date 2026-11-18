@@ -5,6 +5,16 @@
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@color/bg</item>
         <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowAnimationStyle">@style/Rxhome.Screens</item>
     </style>
+
+    <!-- Screens slide and fade instead of cutting. -->
+    <style name="Rxhome.Screens" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/rx_open_enter</item>
+        <item name="android:activityOpenExitAnimation">@anim/rx_open_exit</item>
+        <item name="android:activityCloseEnterAnimation">@anim/rx_close_enter</item>
+        <item name="android:activityCloseExitAnimation">@anim/rx_close_exit</item>
+    </style>
+
     <color name="bg">#FF0C0C0E</color>
 </resources>

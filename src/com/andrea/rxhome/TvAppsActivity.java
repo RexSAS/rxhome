@@ -105,6 +105,7 @@ public class TvAppsActivity extends Activity {
         app.addView(label);
         app.setClickable(true);
         app.setFocusable(true);
+        Ui.press(app);
         app.setContentDescription("Open " + name + " on the TV");
         app.setOnClickListener(v -> {
             Ui.haptic(v);
@@ -149,6 +150,7 @@ public class TvAppsActivity extends Activity {
 
         c.setClickable(true);
         c.setFocusable(true);
+        Ui.press(c);
         c.setContentDescription(title + (sub.isEmpty() ? "" : ", " + sub));
         c.setOnClickListener(v -> {
             Ui.haptic(v);
@@ -245,7 +247,10 @@ public class TvAppsActivity extends Activity {
         if (bytes == null) return;
         Bitmap b = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
         if (b != null) runOnUiThread(() -> {
-            if (!isDestroyed()) v.setImageBitmap(b);
+            if (isDestroyed()) return;
+            v.setAlpha(0f);
+            v.setImageBitmap(b);
+            v.animate().alpha(1f).setDuration(300); // pictures fade in as they arrive
         });
     }
 

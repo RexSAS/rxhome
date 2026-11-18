@@ -57,6 +57,7 @@ public class MainActivity extends Activity {
         Ui.window(this);
         cfg = new Config(this);
         splashPending = state == null; // a fresh start, not a rotation or a return
+        setContentView(build()); // once: coming back only redraws what changed (renderParts)
         if (checkSelfPermission(Vpn.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Vpn.PERMISSION}, 1); // lets rxhome switch on the WireGuard tunnel
         }
@@ -70,8 +71,7 @@ public class MainActivity extends Activity {
         vpnTriedAt = -Vpn.RETRY_MS;
         // Watches Wi-Fi changes and which app is in front while you use rxhome or Jellyfin.
         startForegroundService(new Intent(this, TunnelWatch.class));
-        // Rebuilt on every resume: settings may have changed lights or scenes.
-        setContentView(build());
+        renderParts(); // Settings may have changed the lights or scenes
         if (splashPending) {
             splashPending = false;
             // Over the whole window (content gets rebuilt while loading); skipped with animations off.
@@ -88,6 +88,24 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
+    private LinearLayout lightsSlot, scenesSlot;
+    private String shownLights, shownScenes;
+
+    /** Redraws the lights card and the scenes only when their settings changed (keeps scroll, no flash). */
+    private void renderParts() {
+        String l = cfg.get(Config.LIGHTS), s = cfg.get(Config.SCENES);
+        if (!l.equals(shownLights)) {
+            shownLights = l;
+            lightsSlot.removeAllViews();
+            lightsSlot.addView(lightsTile());
+        }
+        if (!s.equals(shownScenes)) {
+            shownScenes = s;
+            scenesSlot.removeAllViews();
+            scenesSlot.addView(scenes());
+        }
+    }
+
     private View build() {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -96,8 +114,15 @@ public class MainActivity extends Activity {
         col.addView(header());
         col.addView(serverTile());
         col.addView(tvTile());
-        col.addView(lightsTile());
-        col.addView(scenes());
+        lightsSlot = new LinearLayout(this);
+        lightsSlot.setOrientation(LinearLayout.VERTICAL);
+        col.addView(lightsSlot);
+        scenesSlot = new LinearLayout(this);
+        scenesSlot.setOrientation(LinearLayout.VERTICAL);
+        col.addView(scenesSlot);
+        Ui.animateLayout(col);
+        shownLights = shownScenes = null;
+        renderParts();
         ScrollView s = new ScrollView(this);
         s.setFillViewport(true);
         s.addView(col);
@@ -189,7 +214,7 @@ public class MainActivity extends Activity {
     /** CPU · temp · RAM · uptime line; hidden when node_exporter can't be reached. */
     private void showStats(String stats, boolean fresh) {
         if (fresh && stats != null) cfg.prefs.edit().putString("last_stats", stats).apply();
-        serverStats.setText(stats == null ? "" : stats);
+        Ui.setText(serverStats, stats == null ? "" : stats);
         serverStats.setVisibility(stats == null ? View.GONE : View.VISIBLE);
         statsSeen = fresh && stats != null;
         paintServer();
@@ -273,7 +298,7 @@ public class MainActivity extends Activity {
     private void showTv(State s, boolean fresh) {
         if (fresh) cfg.prefs.edit().putString("last_tv", s.name()).apply();
         boolean paired = cfg.philips() != null; // then the state is the TV's own, else the FireStick's
-        tvStatus.setText(s == State.ON ? (paired ? "On" : "On · FireStick")
+        Ui.setText(tvStatus, s == State.ON ? (paired ? "On" : "On · FireStick")
             : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);
         tvStatus.setTextColor(Ui.DIM);
         Ui.reachable(tvTile, s != State.UNREACHABLE);
@@ -358,7 +383,7 @@ public class MainActivity extends Activity {
         void show(boolean on, int brightness, boolean reachable) {
             updating = true;
             toggle.setChecked(on);
-            bar.setProgress(brightness);
+            bar.setProgress(brightness, true);
             updating = false;
             Ui.reachable(view, reachable);
             cfg.prefs.edit().putString("light_" + name, (on ? "1," : "0,") + brightness).apply();
@@ -736,7 +761,7 @@ public class MainActivity extends Activity {
             if (after.equals(before)) return;
             cfg.put(Config.LIGHTS, after);
             ui(() -> {
-                setContentView(build());
+                renderParts();
                 for (LightRow r : rows.values()) io.execute(r::load);
             });
         } catch (IOException e) {

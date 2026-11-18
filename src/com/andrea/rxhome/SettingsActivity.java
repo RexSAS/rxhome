@@ -76,6 +76,7 @@ public class SettingsActivity extends Activity {
         section(col, "Scenes");
         scenesBox = new LinearLayout(this);
         scenesBox.setOrientation(LinearLayout.VERTICAL);
+        Ui.animateLayout(scenesBox);
         col.addView(scenesBox);
 
         error = Ui.text(this, "", 14, Ui.RED, false);
@@ -285,6 +286,7 @@ public class SettingsActivity extends Activity {
         if (!sub.isEmpty()) row.addView(Ui.text(this, sub, 12, Ui.DIM, false));
         row.setClickable(true);
         row.setFocusable(true);
+        Ui.press(row);
         row.setContentDescription(title + (sub.isEmpty() ? "" : ", " + sub));
         row.setOnClickListener(open);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);

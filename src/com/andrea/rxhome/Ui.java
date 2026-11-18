@@ -66,6 +66,7 @@ final class Ui {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.bottomMargin = dp(c, 12);
         l.setLayoutParams(lp);
+        animateLayout(l);
         return l;
     }
 
@@ -82,6 +83,7 @@ final class Ui {
         b.setPadding(p, p, p, p);
         b.setClickable(true);
         b.setFocusable(true);
+        press(b);
         return b;
     }
 
@@ -101,6 +103,7 @@ final class Ui {
         b.setLayoutParams(new LinearLayout.LayoutParams(s, s));
         b.setClickable(true);
         b.setContentDescription("Power");
+        press(b);
         return b;
     }
 
@@ -115,7 +118,44 @@ final class Ui {
     }
 
     /** Grey = unreachable. */
+    /** Grey = unreachable; fades between the two once on screen. */
     static void reachable(View v, boolean yes) {
-        v.setAlpha(yes ? 1f : 0.35f);
+        float to = yes ? 1f : 0.35f;
+        if (v.isAttachedToWindow()) v.animate().alpha(to).setDuration(200);
+        else v.setAlpha(to);
+    }
+
+    /** Pressed: shrinks a touch and springs back on release. */
+    static void press(View v) {
+        android.animation.StateListAnimator s = new android.animation.StateListAnimator();
+        s.addState(new int[] {android.R.attr.state_pressed}, scale(v, 0.96f, 90, new android.view.animation.DecelerateInterpolator()));
+        s.addState(new int[] {}, scale(v, 1f, 220, new android.view.animation.OvershootInterpolator(2.5f)));
+        v.setStateListAnimator(s);
+    }
+
+    private static android.animation.Animator scale(View v, float to, long ms, android.animation.TimeInterpolator i) {
+        android.animation.AnimatorSet set = new android.animation.AnimatorSet();
+        set.playTogether(android.animation.ObjectAnimator.ofFloat(v, "scaleX", to), android.animation.ObjectAnimator.ofFloat(v, "scaleY", to));
+        set.setDuration(ms);
+        set.setInterpolator(i);
+        return set;
+    }
+
+    /** Children appearing, disappearing or resizing animate instead of jumping. */
+    static void animateLayout(android.view.ViewGroup g) {
+        android.animation.LayoutTransition t = new android.animation.LayoutTransition();
+        t.enableTransitionType(android.animation.LayoutTransition.CHANGING);
+        t.setDuration(220);
+        g.setLayoutTransition(t);
+    }
+
+    /** New text fades in (nothing happens if it's the same). */
+    static void setText(TextView t, CharSequence s) {
+        if (android.text.TextUtils.equals(t.getText(), s)) return;
+        t.setText(s);
+        if (t.isAttachedToWindow()) {
+            t.setAlpha(0.2f);
+            t.animate().alpha(1f).setDuration(200);
+        }
     }
 }
