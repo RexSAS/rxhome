@@ -50,5 +50,16 @@ public class SpotifyTest {
         assert ep.title.equals("Ep 1") && ep.by.equals("Pod") && !ep.playing;
         assert Spotify.parsePlaying("") == null && Spotify.parsePlaying("{\"is_playing\":false,\"item\":null}") == null;
         assert Spotify.transferBody("d1").equals("{\"device_ids\":[\"d1\"],\"play\":true}");
+
+        // Your own names for speakers ("Spotify name=Your name" lines); unnamed ones keep Spotify's.
+        String names = Spotify.rename("", "Echo Dot", "Salotto");
+        assert names.equals("Echo Dot=Salotto") : names;
+        names = Spotify.rename(names, "Philips TV", "Tv");
+        assert Spotify.label(names, "Echo Dot").equals("Salotto") && Spotify.label(names, "Philips TV").equals("Tv");
+        assert Spotify.label(names, "Cucina").equals("Cucina");
+        names = Spotify.rename(names, "Echo Dot", " ");                 // empty: back to Spotify's name
+        assert Spotify.label(names, "Echo Dot").equals("Echo Dot") && names.equals("Philips TV=Tv") : names;
+        names = Spotify.rename(names, "Philips TV", "Tv: big=screen");  // separators can't break the format
+        assert Spotify.label(names, "Philips TV").equals("Tv big screen") : Spotify.label(names, "Philips TV");
     }
 }

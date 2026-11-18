@@ -171,13 +171,20 @@ public class SceneEditorActivity extends Activity {
                 break;
             case "music": {
                 // The speakers the home screen's Music card last saw on Spotify, plus this step's own.
-                List<String> names = new ArrayList<>();
-                for (String n : new Config(this).get(Config.SPOTIFY_SPEAKERS).split("\n")) if (!n.trim().isEmpty()) names.add(n.trim());
-                if (s.length == 2 && !names.contains(s[1])) names.add(0, s[1]);
-                if (names.isEmpty()) {
+                // Shown with your names (Music card: hold to rename); the step keeps Spotify's own name.
+                Config c = new Config(this);
+                String renamed = c.get(Config.SPEAKER_NAMES);
+                List<String> real = new ArrayList<>();
+                for (String n : c.get(Config.SPOTIFY_SPEAKERS).split("\n")) if (!n.trim().isEmpty()) real.add(n.trim());
+                if (s.length == 2 && !real.contains(s[1])) real.add(0, s[1]);
+                List<String> shown = new ArrayList<>();
+                for (String n : real) shown.add(Spotify.label(renamed, n));
+                if (s.length == 2) title.setText((i + 1) + ". Music → " + Spotify.label(renamed, s[1]));
+                if (real.isEmpty()) {
                     sub(tile, "CONNECT SPOTIFY IN SETTINGS, THEN OPEN THE HOME SCREEN ONCE TO SEE YOUR SPEAKERS");
                 } else {
-                    chips(tile, names, s.length == 2 ? s[1] : "", pick -> steps.set(i, new String[] {"music", pick}));
+                    chips(tile, shown, s.length == 2 ? Spotify.label(renamed, s[1]) : "",
+                        pick -> steps.set(i, new String[] {"music", real.get(shown.indexOf(pick))}));
                 }
                 break;
             }

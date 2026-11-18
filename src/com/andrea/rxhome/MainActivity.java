@@ -654,7 +654,35 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.topMargin = Ui.dp(this, 10);
         tile.addView(sc, lp);
+        TextView hint = Ui.text(this, "Hold a speaker to rename it", 11, Ui.DIM, false);
+        hint.setPadding(0, Ui.dp(this, 6), 0, 0);
+        tile.addView(hint);
         return tile;
+    }
+
+    /** Your own name for a speaker, shown here and in scenes; Spotify keeps its own. */
+    private void renameSpeaker(String spotifyName) {
+        String names = cfg.get(Config.SPEAKER_NAMES);
+        android.widget.EditText e = new android.widget.EditText(this);
+        e.setText(Spotify.label(names, spotifyName));
+        e.setHint(spotifyName);
+        e.setSelectAllOnFocus(true);
+        e.setSingleLine(true);
+        e.setContentDescription("Name for " + spotifyName);
+        android.widget.FrameLayout box = new android.widget.FrameLayout(this);
+        int p = Ui.dp(this, 20);
+        box.setPadding(p, Ui.dp(this, 8), p, 0);
+        box.addView(e);
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Rename " + spotifyName)
+            .setMessage("Empty = Spotify's name. Scenes keep working.")
+            .setView(box)
+            .setPositiveButton("Save", (d, w) -> {
+                cfg.put(Config.SPEAKER_NAMES, Spotify.rename(cfg.get(Config.SPEAKER_NAMES), spotifyName, e.getText().toString()));
+                loadMusic();
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 
     private void loadMusic() {
@@ -672,17 +700,24 @@ public class MainActivity extends Activity {
     }
 
     private void paintMusic(List<Spotify.Device> ds, Spotify.Playing p) {
+        String names = cfg.get(Config.SPEAKER_NAMES);
         Ui.setText(nowPlaying, p == null ? "Nothing playing · tap a speaker to start"
             : (p.playing ? "▶ " : "Paused · ") + p.title + (p.by.isEmpty() ? "" : " — " + p.by)
-                + (p.device.isEmpty() ? "" : " · on " + p.device));
+                + (p.device.isEmpty() ? "" : " · on " + Spotify.label(names, p.device)));
         speakers.removeAllViews();
-        StringBuilder names = new StringBuilder();
+        StringBuilder seen = new StringBuilder();
         for (Spotify.Device d : ds) {
-            names.append(d.name).append('\n');
-            TextView chip = Ui.button(this, d.name, d.active);
+            seen.append(d.name).append('\n');
+            String label = Spotify.label(names, d.name);
+            TextView chip = Ui.button(this, label, d.active);
             chip.setTextSize(13);
-            chip.setContentDescription("Move music to " + d.name + (d.active ? ", playing here" : ""));
+            chip.setContentDescription("Move music to " + label + (d.active ? ", playing here" : "") + ". Hold to rename");
             chip.setOnClickListener(v -> moveMusic(chip, d));
+            chip.setOnLongClickListener(v -> {
+                Ui.haptic(v);
+                renameSpeaker(d.name);
+                return true;
+            });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
             lp.rightMargin = Ui.dp(this, 8);
             speakers.addView(chip, lp);
@@ -690,7 +725,7 @@ public class MainActivity extends Activity {
         if (ds.isEmpty()) {
             speakers.addView(Ui.text(this, "No speakers on Spotify right now: play Spotify on one once and it shows up", 13, Ui.DIM, false));
         } else {
-            cfg.put(Config.SPOTIFY_SPEAKERS, names.toString().trim()); // for the scene editor's speaker chips
+            cfg.put(Config.SPOTIFY_SPEAKERS, seen.toString().trim()); // for the scene editor's speaker chips
         }
     }
 
