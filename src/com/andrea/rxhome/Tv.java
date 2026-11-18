@@ -237,6 +237,29 @@ class Tv {
         films().openItem(component, itemId);
     }
 
+    // --- installing apps (the FireStick's) ---
+
+    String[] packages() throws IOException {
+        return films().packages();
+    }
+
+    String abi() throws IOException {
+        return films().abi();
+    }
+
+    void install(java.io.File apk) throws IOException {
+        films().install(apk);
+    }
+
+    void openStore(String pkg) throws IOException {
+        films().openStore(pkg);
+    }
+
+    /** null = SmartTube, else the official YouTube app's package. */
+    void youtube(String pkg) {
+        if (stick != null) stick.youtube = pkg;
+    }
+
     private FireTv films() {
         if (stick == null) throw new UnsupportedOperationException("Needs a FireStick on this TV");
         return stick;

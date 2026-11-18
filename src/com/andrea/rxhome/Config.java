@@ -27,6 +27,7 @@ final class Config {
     private static final java.util.Map<String, Tv> TVS_BY_UID = new java.util.HashMap<>();
     private static final java.util.Map<String, String> KEYS_BY_UID = new java.util.HashMap<>();
 
+    static final String YOUTUBE_APP = "youtube_app_"; // + TV uid: "" = SmartTube, else the official YouTube app's package
     static final String TVS = "tvs", TV_ACTIVE = "tv_active", TVS_MIGRATED = "tvs_migrated";
 
     final SharedPreferences prefs;
@@ -126,6 +127,7 @@ final class Config {
             if (t != null) t.close();
             FireTv stick = a.hasStick() ? stick(a.stickIp) : null;
             if (stick != null && !a.stickId.equals(a.stickIp)) stick.serial = a.stickId; // ip = no serial was readable
+            if (stick != null) stick.youtube = get(YOUTUBE_APP + a.uid).isEmpty() ? null : get(YOUTUBE_APP + a.uid);
             t = new Tv(screen(a), stick, a.hasSky() ? new Sky(a.skyIp) : null, a.input);
             TVS_BY_UID.put(a.uid, t);
             KEYS_BY_UID.put(a.uid, key);

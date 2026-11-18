@@ -102,6 +102,35 @@ class Adb {
             return line;
         }
 
+        /** Raw bytes (e.g. an APK into "exec:cmd package install -S <size>"), in the biggest chunks the device takes. */
+        void write(byte[] b, int len, int timeoutMs) throws IOException {
+            socket.setSoTimeout(timeoutMs);
+            int chunk = Math.min(peerMax, 64 * 1024);
+            for (int i = 0; i < len; i += chunk) {
+                send(WRTE, local, remote, java.util.Arrays.copyOfRange(b, i, Math.min(len, i + chunk)));
+                while (true) {
+                    Msg m = read();
+                    if (m.arg1 != local) continue;
+                    if (m.cmd == OKAY) break;
+                    take(m);
+                }
+            }
+        }
+
+        /** Everything the command still says, until it ends. */
+        String readAll(int timeoutMs) throws IOException {
+            socket.setSoTimeout(timeoutMs);
+            while (true) {
+                Msg m = read();
+                if (m.arg1 != local) continue;
+                if (m.cmd == CLSE) break;
+                take(m);
+            }
+            String out = pending.toString();
+            pending.setLength(0);
+            return out;
+        }
+
         private void take(Msg m) throws IOException {
             if (m.cmd == WRTE) {
                 pending.append(new String(m.data, StandardCharsets.UTF_8));
@@ -111,6 +140,8 @@ class Adb {
             }
         }
     }
+
+    private int peerMax = MAXDATA;
 
     synchronized Stream open(String service, int timeoutMs) throws IOException {
         if (socket == null) connect(timeoutMs);
@@ -174,7 +205,10 @@ class Adb {
                 if (signed) throw new AdbAuthException("Accept the USB debugging prompt on the TV");
                 throw e;
             }
-            if (m.cmd == CNXN) return;
+            if (m.cmd == CNXN) {
+                peerMax = m.arg1 > 0 ? m.arg1 : MAXDATA; // the biggest message the device takes
+                return;
+            }
             if (m.cmd != AUTH || m.arg0 != 1) throw new IOException("Unexpected ADB message");
             if (!signed) {
                 send(AUTH, 2, 0, sign(m.data));
