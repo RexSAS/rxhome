@@ -114,6 +114,18 @@ public class MainActivity extends Activity {
     private LinearLayout lightsSlot, scenesSlot, musicSlot, tvSlot, homeCol;
     private String shownLights, shownScenes, shownMusic, shownTvs;
     private final List<TvCard> tvCards = new ArrayList<>();
+    static final String TV_SHOWN = "tv_shown"; // the TV card in view on the home screen
+
+    /** The pager's dots: the TV in view red, the others dim. */
+    private void paintDots(LinearLayout dots, int page) {
+        for (int i = 0; i < dots.getChildCount(); i++) {
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            g.setColor(i == page ? Ui.RED : 0xFF3A3A44);
+            dots.getChildAt(i).setBackground(g);
+        }
+        dots.setContentDescription("TV " + (page + 1) + " of " + dots.getChildCount());
+    }
 
     /** Redraws the lights card and the scenes only when their settings changed (keeps scroll, no flash). */
     private void renderParts() {
@@ -129,11 +141,40 @@ public class MainActivity extends Activity {
             shownTvs = tvKey.toString();
             tvSlot.removeAllViews();
             tvCards.clear();
-            for (Tvs.Tv t : cfg.tvs()) {
-                TvCard c = new TvCard(t);
+            // One TV in view; swipe from the right for the next. The one shown last time comes back.
+            Pager pager = new Pager(this);
+            LinearLayout dots = new LinearLayout(this);
+            dots.setGravity(Gravity.CENTER);
+            List<Tvs.Tv> tvs = cfg.tvs();
+            int shown = 0;
+            for (int i = 0; i < tvs.size(); i++) {
+                TvCard c = new TvCard(tvs.get(i));
                 tvCards.add(c);
-                tvSlot.addView(c.tile);
+                c.tile.setLayoutParams(new android.widget.FrameLayout.LayoutParams(-1, -2));
+                pager.add(c.tile);
+                if (tvs.get(i).id.equals(cfg.get(TV_SHOWN))) shown = i;
+                View dot = new View(this);
+                int d = Ui.dp(this, 6);
+                LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(d, d);
+                dl.setMargins(d / 2, 0, d / 2, 0);
+                dots.addView(dot, dl);
             }
+            pager.onPage = page -> {
+                cfg.put(TV_SHOWN, tvs.get(page).id);
+                paintDots(dots, page);
+            };
+            pager.show(shown);
+            paintDots(dots, shown);
+            LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, -2);
+            pl.leftMargin = pl.rightMargin = -pager.gap(); // cards line up with the others; a gap shows while swiping
+            tvSlot.addView(pager, pl);
+            if (tvs.size() > 1) {
+                LinearLayout.LayoutParams dotsLp = new LinearLayout.LayoutParams(-1, -2);
+                dotsLp.topMargin = Ui.dp(this, 8);
+                tvSlot.addView(dots, dotsLp);
+            }
+            View space = new View(this); // the cards' usual gap below
+            tvSlot.addView(space, new LinearLayout.LayoutParams(1, Ui.dp(this, 12)));
         }
         String m = cfg.spotify() == null ? "" : "connected";
         if (!m.equals(shownMusic)) {
