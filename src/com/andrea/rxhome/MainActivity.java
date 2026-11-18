@@ -238,12 +238,13 @@ public class MainActivity extends Activity {
     /** Just the server (Jellyfin + stats), not a full refresh. */
     private void checkServerNow() {
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
+        int sid = statusChecks.next(), mid = statsChecks.next();
         io.execute(() -> {
             State st = Server.status(server, pub);
             String stats = Metrics.fetch(metricsUrl(server));
             ui(() -> {
-                showStats(stats, true);
-                showServer(st, true);
+                if (statsChecks.current(mid)) showStats(stats, true);
+                if (statusChecks.current(sid)) showServer(st, true);
             });
         });
     }
@@ -299,7 +300,11 @@ public class MainActivity extends Activity {
     }
 
     /** CPU · temp · RAM · uptime line; hidden when node_exporter can't be reached. */
+    /** Checks overlap (refresh + every 3 s while booting): only the newest answer counts. */
+    private final Steady statusChecks = new Steady(), statsChecks = new Steady();
+
     private void showStats(String stats, boolean fresh) {
+        if (fresh) stats = statsChecks.stats(stats); // one missed reading keeps the line; two hide it
         Ui.setText(serverStats, stats == null ? "" : stats);
         serverStats.setVisibility(stats == null ? View.GONE : View.VISIBLE);
         statsSeen = fresh && stats != null;
@@ -734,10 +739,11 @@ public class MainActivity extends Activity {
                 afterChecks();
             });
         });
+        int sid = statusChecks.next(), mid = statsChecks.next();
         io.execute(() -> {
             State s = Server.status(server, pub);
             ui(() -> {
-                if (gen != generation) return;
+                if (gen != generation || !statusChecks.current(sid)) return; // a newer check already answered
                 showServer(s, true);
                 genServer = s;
                 afterChecks();
@@ -745,7 +751,7 @@ public class MainActivity extends Activity {
         });
         io.execute(() -> {
             String stats = Metrics.fetch(metricsUrl(server));
-            ui(() -> { if (gen == generation) showStats(stats, true); });
+            ui(() -> { if (gen == generation && statsChecks.current(mid)) showStats(stats, true); });
         });
         FireTv tv = cfg.tv();
         tv.onKeyPrompt(() -> ui(() -> {
