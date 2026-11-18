@@ -654,10 +654,70 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.topMargin = Ui.dp(this, 10);
         tile.addView(sc, lp);
-        TextView hint = Ui.text(this, "Hold a speaker to rename it", 11, Ui.DIM, false);
-        hint.setPadding(0, Ui.dp(this, 6), 0, 0);
-        tile.addView(hint);
+
+        // ⏮ ⏯ ⏭, then the playing speaker's volume; shown once something is playing.
+        controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.VERTICAL);
+        controls.setVisibility(View.GONE);
+        LinearLayout row = new LinearLayout(this);
+        TextView prev = Ui.button(this, "⏮", false), next = Ui.button(this, "⏭", false);
+        playPause = Ui.button(this, "▶", true);
+        prev.setContentDescription("Previous");
+        next.setContentDescription("Next");
+        prev.setOnClickListener(v -> control(v, Spotify::previous));
+        next.setOnClickListener(v -> control(v, Spotify::next));
+        playPause.setOnClickListener(v -> control(v, playingNow ? Spotify::pause : Spotify::play));
+        TextView[] keys = {prev, playPause, next};
+        for (int k = 0; k < keys.length; k++) {
+            LinearLayout.LayoutParams kl = new LinearLayout.LayoutParams(0, -2, 1);
+            if (k > 0) kl.leftMargin = Ui.dp(this, 8);
+            row.addView(keys[k], kl);
+        }
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+        rl.topMargin = Ui.dp(this, 12);
+        controls.addView(row, rl);
+        volume = new android.widget.SeekBar(this);
+        volume.setMax(100);
+        volume.setContentDescription("Volume");
+        volume.setProgressTintList(android.content.res.ColorStateList.valueOf(Ui.RED));
+        volume.setThumbTintList(android.content.res.ColorStateList.valueOf(Ui.RED));
+        volume.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(android.widget.SeekBar b, int v, boolean user) {}
+            @Override public void onStartTrackingTouch(android.widget.SeekBar b) {}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar b) {
+                int level = b.getProgress();
+                control(b, sp -> sp.volume(level));
+            }
+        });
+        LinearLayout.LayoutParams vl = new LinearLayout.LayoutParams(-1, Ui.dp(this, 40));
+        vl.topMargin = Ui.dp(this, 8);
+        controls.addView(volume, vl);
+        tile.addView(controls);
         return tile;
+    }
+
+    private LinearLayout controls;
+    private TextView playPause;
+    private android.widget.SeekBar volume;
+    private boolean playingNow;
+
+    private interface MusicCall {
+        void run(Spotify sp) throws IOException;
+    }
+
+    /** A playback control, then the card checks again (Spotify takes a moment to change). */
+    private void control(View v, MusicCall call) {
+        Spotify sp = cfg.spotify();
+        if (sp == null) return;
+        Ui.haptic(v);
+        io.execute(() -> {
+            try {
+                call.run(sp);
+            } catch (IOException e) {
+                ui(() -> toast(e.getMessage()));
+            }
+            ui(() -> main.postDelayed(this::loadMusic, 700));
+        });
     }
 
     /** Your own name for a speaker, shown here and in scenes; Spotify keeps its own. */
@@ -704,6 +764,12 @@ public class MainActivity extends Activity {
         Ui.setText(nowPlaying, p == null ? "Nothing playing · tap a speaker to start"
             : (p.playing ? "▶ " : "Paused · ") + p.title + (p.by.isEmpty() ? "" : " — " + p.by)
                 + (p.device.isEmpty() ? "" : " · on " + Spotify.label(names, p.device)));
+        controls.setVisibility(p == null ? View.GONE : View.VISIBLE);
+        playingNow = p != null && p.playing;
+        playPause.setText(playingNow ? "❚❚" : "▶");
+        playPause.setContentDescription(playingNow ? "Pause" : "Play");
+        volume.setVisibility(p != null && p.volume >= 0 ? View.VISIBLE : View.GONE);
+        if (p != null && p.volume >= 0 && !volume.isPressed()) volume.setProgress(p.volume);
         speakers.removeAllViews();
         StringBuilder seen = new StringBuilder();
         for (Spotify.Device d : ds) {
