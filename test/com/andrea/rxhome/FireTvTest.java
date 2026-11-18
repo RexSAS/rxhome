@@ -86,6 +86,15 @@ public class FireTvTest {
         assert stickWithCec("").tvState(State.OFF) == State.OFF;
         calls.clear();
 
+        // Not paired: a set volume / mute says what to do too.
+        for (Io io : new Io[] {() -> stick().tvVolume(20), () -> stick().tvMute()}) {
+            try {
+                io.go();
+                throw new AssertionError("volume without a paired TV");
+            } catch (java.io.IOException e) {
+                assert e.getMessage().contains("Pair") : e.getMessage();
+            }
+        }
         // Not paired: volume says what to do.
         FireTv bare = stick();
         try {

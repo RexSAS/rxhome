@@ -47,6 +47,8 @@ public class SceneRunnerTest {
         @Override void claudeFm() { log.add("tv play"); }
         @Override void openItem(String component, String id) { log.add("tv item " + id); }
         @Override synchronized void key(int code) { log.add("key " + code); }
+        @Override void tvVolume(int level) { log.add("tv volume " + level); }
+        @Override void tvMute() { log.add("tv mute"); }
     }
 
     static class FakeBot extends SwitchBot {
@@ -134,6 +136,10 @@ public class SceneRunnerTest {
         // Remote keys: pressed in order, with a gap between them so the TV keeps up.
         assert Arrays.equals(run(r, "X: keys home down ok"), new int[] {1, 1});
         assert log.equals(Arrays.asList("key 3", "gap", "key 20", "gap", "key 23")) : log;
+
+        // TV volume: a level, or mute.
+        assert Arrays.equals(run(r, "X: tv volume 20; tv volume mute"), new int[] {2, 2});
+        assert log.equals(Arrays.asList("tv volume 20", "tv mute")) : log;
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));

@@ -146,6 +146,7 @@ final class Scenes {
                     return app + ": " + contents(s[2]).get(s[3]) + " on the TV";
                 }
                 if (s[1].equals("music")) return "Claude FM on the TV";
+                if (s[1].equals("volume")) return s[2].equals("mute") ? "TV muted" : "TV volume " + s[2];
                 return "TV " + s[1];
             case "server":
                 return s[1].equals("press") ? "Press the server's power button" : "Server must be " + s[1];
@@ -220,6 +221,8 @@ final class Scenes {
             case "tv":
                 ok = s.length == 2 && (s[1].equals("on") || s[1].equals("off") || s[1].equals("music"))
                     || s.length == 3 && s[1].equals("app")
+                    || s.length == 3 && s[1].equals("volume")
+                        && (s[2].equals("mute") || s[2].matches("\\d{1,2}") && Integer.parseInt(s[2]) <= 60)
                     || s.length == 4 && s[1].equals("app") && !s[3].isEmpty() && contents(s[2]).containsKey(s[3]);
                 break;
             case "server":

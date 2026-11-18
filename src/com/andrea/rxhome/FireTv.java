@@ -220,6 +220,19 @@ class FireTv {
         else wake();
     }
 
+    /** The TV's volume to a level (its own 0-60 scale), through the paired Philips. */
+    void tvVolume(int level) throws IOException {
+        Philips p = philips;
+        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
+        p.setVolume(level);
+    }
+
+    void tvMute() throws IOException {
+        Philips p = philips;
+        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
+        p.mute();
+    }
+
     /** A key on the TV itself: "VolumeUp", "VolumeDown", "Mute". */
     void tvKey(String key) throws IOException {
         Philips p = philips;

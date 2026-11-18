@@ -99,6 +99,11 @@ public class PhilipsTest {
         assert Philips.macFor(net, "192.168.1.221").equals("aa:bb:cc:dd:ee:ff") : Philips.macFor(net, "192.168.1.221");
         assert Philips.macFor("[]", "192.168.1.221") == null;
 
+        // Volume on the TV's API: a level (unmutes), or mute keeping the level.
+        assert Philips.volumeBody(20, false).equals("{\"muted\":false,\"current\":20}");
+        assert Philips.volumeBody(6, true).equals("{\"muted\":true,\"current\":6}");
+        assert Philips.currentVolume("{\"muted\": false,\"current\": 6,\"min\": 0,\"max\": 60}") == 6;
+
         speed();
 
         // Live, read-only (RXHOME_PHILIPS=192.168.1.221): the TV answers and wants digest pairing.

@@ -87,6 +87,13 @@ public class ScenesTest {
         assert Scenes.describe(new String[] {"keys", "home", "down", "down", "ok"}).equals("Remote: Home ↓ ↓ OK");
         assert Scenes.KEYS.get("ok") == 23 && Scenes.KEYS.get("back") == 4 && Scenes.KEYS.get("play") == 85;
 
+        // TV volume: a level on the TV's own 0-60 scale, or mute.
+        assert Scenes.parse("A: tv volume 20; tv volume mute; tv volume 0").get(0).steps.size() == 3;
+        failsOnLine("A: tv volume 61", 1);
+        failsOnLine("A: tv volume loud", 1);
+        assert Scenes.describe(new String[] {"tv", "volume", "20"}).equals("TV volume 20");
+        assert Scenes.describe(new String[] {"tv", "volume", "mute"}).equals("TV muted");
+
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");
         assert l.size() == 2;

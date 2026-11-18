@@ -64,6 +64,29 @@ class Philips {
     // No power-state reader: this TV (JointSPACE 6.1, Linux) has no /6/powerstate (404), and every other
     // endpoint answers the same on and in standby. The TV's power is read from HDMI-CEC (FireTv).
 
+    /** Sets the TV's volume (its own scale, 0-60 here) and unmutes. */
+    void setVolume(int level) throws IOException {
+        request("POST", "/6/audio/volume", volumeBody(level, false), ip, user, pass, certPin, null);
+    }
+
+    /** Mutes, keeping the level for when it's unmuted. */
+    void mute() throws IOException {
+        int now = currentVolume(get("audio/volume"));
+        request("POST", "/6/audio/volume", volumeBody(now, true), ip, user, pass, certPin, null);
+    }
+
+    static String volumeBody(int level, boolean muted) {
+        return "{\"muted\":" + muted + ",\"current\":" + Math.max(0, level) + "}";
+    }
+
+    static int currentVolume(String json) {
+        try {
+            return new JSONObject(json).optInt("current", 0);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     /** GET /6/<path> with the login, e.g. "context": the raw reply. */
     String get(String path) throws IOException {
         return request("GET", "/6/" + path, null, ip, user, pass, certPin, null);

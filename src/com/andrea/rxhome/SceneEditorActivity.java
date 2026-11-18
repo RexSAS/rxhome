@@ -151,6 +151,16 @@ public class SceneEditorActivity extends Activity {
                             }
                         });
                     }
+                } else if (s[1].equals("volume")) {
+                    boolean mute = s[2].equals("mute");
+                    chips(tile, Arrays.asList("Set level", "Mute"), mute ? "Mute" : "Set level",
+                        pick -> steps.set(i, new String[] {"tv", "volume", pick.equals("Mute") ? "mute" : "15"}));
+                    if (!mute) {
+                        slider(tile, 0, 60, Integer.parseInt(s[2]), v -> {
+                            s[2] = Integer.toString(v);
+                            title.setText((i + 1) + ". " + Scenes.describe(s));
+                        });
+                    }
                 } else if (!s[1].equals("music")) {
                     chips(tile, Arrays.asList("On", "Off"), s[1].equals("on") ? "On" : "Off", pick -> s[1] = pick.toLowerCase());
                 }
@@ -386,9 +396,9 @@ public class SceneEditorActivity extends Activity {
 
     private void addStep() {
         String[] names = {"Lights", "TV on / off", "Open an app on the TV", "Server must be on / off", "Wait",
-            "Open the remote on the phone", "Remote keys on the TV"};
+            "Open the remote on the phone", "Remote keys on the TV", "TV volume"};
         String[][] start = {{"light", "all", "on"}, {"tv", "on"}, {"tv", "app", "org.rxfilms.tv"}, {"server", "on"}, {"wait", "5"},
-            {"phone", "remote"}, {"keys"}};
+            {"phone", "remote"}, {"keys"}, {"tv", "volume", "15"}};
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Add a step")
             .setItems(names, (d, w) -> {

@@ -78,6 +78,10 @@ class SceneRunner {
                     }
                 }
                 else if (s[1].equals("app")) return open(s[2], s.length == 4 ? s[3] : "");
+                else if (s[1].equals("volume")) {
+                    if (s[2].equals("mute")) tv.tvMute();
+                    else tv.tvVolume(Integer.parseInt(s[2]));
+                }
                 else tv.claudeFm(); // the old "tv music" step
                 return true;
             case "server":
