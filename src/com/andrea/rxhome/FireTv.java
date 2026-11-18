@@ -199,20 +199,28 @@ class FireTv {
 
     /** The stick's HDMI-CEC log lines that carry the TV's power. */
     String cecLog() throws IOException {
-        return adb.shell("dumpsys hdmi_control | grep -E 'Standby>|Report Power Status>'", 3000);
+        return adb.shell("dumpsys hdmi_control | grep -E 'Standby>|Report Power Status>|Set Stream Path>|Routing Change>|Request Active Source>'", 3000);
     }
 
-    private static final java.util.regex.Pattern TV_POWER = java.util.regex.Pattern.compile(
-        "\\[R\\][^\\n]*<(?:Standby> 0[0-9A-Fa-f]:36|Report Power Status> 0[0-9A-Fa-f]:90:0([0-3]))");
+    /** A message the TV sent (logical address 0): its opcode, and the first parameter if any. */
+    private static final java.util.regex.Pattern TV_SAID = java.util.regex.Pattern.compile(
+        "\\[R\\][^\\n]*<[^>\\n]*> 0[0-9A-Fa-f]:([0-9A-Fa-f]{2})(?::([0-9A-Fa-f]{2}))?");
 
     /**
-     * The TV's last word on its power, from messages it sent (logical address 0): &lt;Standby&gt; = off,
-     * &lt;Report Power Status&gt; 00 on / 02 turning on / 01, 03 standby. Null if it said nothing.
+     * The TV's last word on its power, from messages it sent: &lt;Standby&gt; = off, &lt;Report Power Status&gt;
+     * 00 on / 02 turning on / 01, 03 standby; and "show this input" (Routing Change 80, Request Active Source
+     * 85, Set Stream Path 86), which a TV switched on with its own remote sends instead of a power report and
+     * never sends in standby. Null if it said nothing about it.
      */
     static Boolean parseTvPower(String dump) {
-        java.util.regex.Matcher m = TV_POWER.matcher(dump);
+        java.util.regex.Matcher m = TV_SAID.matcher(dump);
         Boolean on = null;
-        while (m.find()) on = m.group(1) != null && (m.group(1).equals("0") || m.group(1).equals("2"));
+        while (m.find()) {
+            String op = m.group(1).toUpperCase(), arg = m.group(2);
+            if (op.equals("36")) on = false;
+            else if (op.equals("90") && arg != null) on = arg.equals("00") || arg.equals("02");
+            else if (op.equals("80") || op.equals("85") || op.equals("86")) on = true;
+        }
         return on;
     }
 

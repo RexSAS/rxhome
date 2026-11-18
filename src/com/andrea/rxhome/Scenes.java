@@ -227,9 +227,10 @@ final class Scenes {
         java.util.Set<String> tvs = new java.util.HashSet<>(), lit = new java.util.HashSet<>();
         for (String[] s : to.steps) {
             if (s[0].equals("music")) music = true;
-            else if (s[0].equals("tv")) {
-                String[] b = untargeted(s);
-                if (b[1].equals("on") || b[1].equals("app") || b[1].equals("music")) tvs.add(tvTarget(s) == null ? "" : tvTarget(s));
+            else if (s[0].equals("tv") || s[0].equals("keys")) { // any step on a TV: the new scene decides it (even "off")
+                tvs.add(tvTarget(s) == null ? "" : tvTarget(s).toLowerCase());
+            } else if (s[0].equals("phone")) { // the remote on the phone drives the first TV
+                tvs.add("");
             } else if (s[0].equals("light")) {
                 if (s[1].equals("all")) allLights = true;
                 else lit.add(s[1]);
@@ -240,7 +241,7 @@ final class Scenes {
             if (u[0].equals("music-pause")) {
                 if (!music) steps.add(u);
             } else if (u[0].equals("tv")) {
-                if (!tvs.contains(tvTarget(u) == null ? "" : tvTarget(u))) steps.add(u);
+                if (!tvs.contains(tvTarget(u) == null ? "" : tvTarget(u).toLowerCase())) steps.add(u);
             } else if (!allLights) { // a light off
                 if (!u[1].equals("all")) {
                     if (!lit.contains(u[1])) steps.add(u);

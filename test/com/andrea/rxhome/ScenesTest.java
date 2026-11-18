@@ -165,6 +165,13 @@ public class ScenesTest {
         assert Scenes.leavesOn(Scenes.parse("M: light all on 30; light Strip off").get(0), "Desk");
         assert !Scenes.leavesOn(Scenes.parse("M: light all on 30; light Strip off").get(0), "Strip");
 
+        // The TV stays on whenever the new scene uses it at all: remote keys, volume, the phone remote too.
+        assert swap("A: tv on", "B: keys home ok", lightNames).equals("keys home ok");
+        assert swap("A: tv on", "B: tv volume 20", lightNames).equals("tv volume 20");
+        assert swap("A: tv on", "B: phone remote", lightNames).equals("phone remote");
+        assert swap("A: tv on @Camera", "B: keys home @camera", lightNames).equals("keys home @camera"); // any case
+        assert swap("A: tv on", "B: tv off", lightNames).equals("tv off");                                // its own off
+
         // Renaming a TV renames it in the scenes too; other steps and TVs stay as they are.
         String renamed = Scenes.renameTv("A: tv on @Camera; keys home @camera; tv on @Studio; light Desk on\nB: tv off @Camera\n",
             "Camera", "Bedroom TV");
