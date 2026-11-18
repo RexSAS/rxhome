@@ -43,12 +43,14 @@ class Spotify {
     static final class Playing {
         final String title, by, device;
         final boolean playing;
+        final int volume; // the playing speaker's volume, -1 when Spotify can't set it there
 
-        Playing(String title, String by, String device, boolean playing) {
+        Playing(String title, String by, String device, boolean playing, int volume) {
             this.title = title;
             this.by = by;
             this.device = device;
             this.playing = playing;
+            this.volume = volume;
         }
     }
 
@@ -87,6 +89,30 @@ class Spotify {
     /** Moves playback to this speaker and plays (it carries on where it was). */
     void transfer(String deviceId) throws IOException {
         call("PUT", "/me/player", transferBody(deviceId));
+    }
+
+    void play() throws IOException {
+        call("PUT", "/me/player/play", "");
+    }
+
+    void pause() throws IOException {
+        call("PUT", "/me/player/pause", "");
+    }
+
+    void next() throws IOException {
+        call("POST", "/me/player/next", "");
+    }
+
+    void previous() throws IOException {
+        call("POST", "/me/player/previous", "");
+    }
+
+    void volume(int percent) throws IOException {
+        call("PUT", volumePath(percent), "");
+    }
+
+    static String volumePath(int percent) {
+        return "/me/player/volume?volume_percent=" + Math.max(0, Math.min(100, percent));
     }
 
     // --- login ---
@@ -154,8 +180,8 @@ class Spotify {
         c.setRequestProperty("Authorization", "Bearer " + token());
         try {
             if (body != null) {
-                c.setDoOutput(true);
-                c.setRequestProperty("Content-Type", "application/json");
+                c.setDoOutput(true); // also for an empty body: Spotify wants a Content-Length on PUT/POST
+                if (!body.isEmpty()) c.setRequestProperty("Content-Type", "application/json");
                 try (OutputStream o = c.getOutputStream()) {
                     o.write(body.getBytes(StandardCharsets.UTF_8));
                 }
@@ -262,7 +288,10 @@ class Spotify {
             JSONObject show = item.optJSONObject("show");
             if (by.length() == 0 && show != null) by.append(show.optString("name"));
             JSONObject dev = o.optJSONObject("device");
-            return new Playing(item.optString("name"), by.toString(), dev == null ? "" : dev.optString("name"), o.optBoolean("is_playing"));
+            int volume = dev == null || dev.isNull("volume_percent") || !dev.optBoolean("supports_volume", true)
+                ? -1 : dev.optInt("volume_percent", -1);
+            return new Playing(item.optString("name"), by.toString(), dev == null ? "" : dev.optString("name"),
+                o.optBoolean("is_playing"), volume);
         } catch (JSONException e) {
             return null;
         }

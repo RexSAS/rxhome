@@ -51,6 +51,16 @@ public class SpotifyTest {
         assert Spotify.parsePlaying("") == null && Spotify.parsePlaying("{\"is_playing\":false,\"item\":null}") == null;
         assert Spotify.transferBody("d1").equals("{\"device_ids\":[\"d1\"],\"play\":true}");
 
+        // Controls: the playing speaker's volume (-1 when Spotify can't set it there), and the commands.
+        Spotify.Playing vol = Spotify.parsePlaying("{\"is_playing\":true,\"device\":{\"name\":\"Echo\",\"volume_percent\":35,"
+            + "\"supports_volume\":true},\"item\":{\"name\":\"S\",\"artists\":[]}}");
+        assert vol.volume == 35 : vol.volume;
+        assert Spotify.parsePlaying("{\"is_playing\":true,\"device\":{\"name\":\"Tv\",\"volume_percent\":50,\"supports_volume\":false},"
+            + "\"item\":{\"name\":\"S\"}}").volume == -1;
+        assert Spotify.parsePlaying("{\"is_playing\":true,\"device\":{\"name\":\"Tv\",\"volume_percent\":null},\"item\":{\"name\":\"S\"}}").volume == -1;
+        assert Spotify.volumePath(35).equals("/me/player/volume?volume_percent=35");
+        assert Spotify.volumePath(150).equals("/me/player/volume?volume_percent=100") && Spotify.volumePath(-5).endsWith("=0");
+
         // Your own names for speakers ("Spotify name=Your name" lines); unnamed ones keep Spotify's.
         String names = Spotify.rename("", "Echo Dot", "Salotto");
         assert names.equals("Echo Dot=Salotto") : names;
