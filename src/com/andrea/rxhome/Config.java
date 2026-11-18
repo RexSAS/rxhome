@@ -102,6 +102,7 @@ final class Config {
     }
 
     static final String JF_TOKEN = "jellyfin_token", JF_USER = "jellyfin_user", JF_DEVICE = "jellyfin_device";
+    static final String BOOTS = "boot_times"; // last server boots, power press → Jellyfin answering (see Boot)
 
     /** Jellyfin for the RxFilms shortcuts; null until signed in (Quick Connect) in Settings. */
     Jellyfin jellyfin() {

@@ -73,6 +73,7 @@ public class MainActivity extends Activity {
         // Watches Wi-Fi changes and which app is in front while you use rxhome or Jellyfin.
         startForegroundService(new Intent(this, TunnelWatch.class));
         renderParts(); // Settings may have changed the lights or scenes
+        if (!cfg.get(POWER_MODE).isEmpty()) followPower();
         if (splashPending) {
             splashPending = false;
             // Over the whole window (content gets rebuilt while loading); skipped with animations off.
@@ -215,12 +216,71 @@ public class MainActivity extends Activity {
         return line;
     }
 
+    static final String POWER_MODE = "power_mode", POWER_AT = "power_at";
+
+    /** While a power-on / shutdown is followed: repaint every second (countdown), check the server every 3 s. */
+    private final Runnable powerTick = new Runnable() {
+        private int n;
+
+        @Override public void run() {
+            if (cfg.get(POWER_MODE).isEmpty() || isDestroyed()) return;
+            paintServer();
+            if (n++ % 3 == 0) checkServerNow();
+            main.postDelayed(this, 1000);
+        }
+    };
+
+    private void followPower() {
+        main.removeCallbacks(powerTick);
+        main.post(powerTick);
+    }
+
+    /** Just the server (Jellyfin + stats), not a full refresh. */
+    private void checkServerNow() {
+        String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
+        io.execute(() -> {
+            State st = Server.status(server, pub);
+            String stats = Metrics.fetch(metricsUrl(server));
+            ui(() -> {
+                showStats(stats, true);
+                showServer(st, true);
+            });
+        });
+    }
+
+    private static long parseLong(String v) {
+        try {
+            return Long.parseLong(v);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     private void paintServer() {
         if (openJellyfin == null) return; // the card is still being built (remembered stats come first)
         State s = shownServer;
         if (s == State.ON) vpnNote = null;
         openJellyfin.setVisibility(s == State.ON && serverFresh && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
             ? View.VISIBLE : View.GONE);
+        String mode = cfg.get(POWER_MODE);
+        if (!mode.isEmpty()) {
+            long elapsed = System.currentTimeMillis() - parseLong(cfg.get(POWER_AT));
+            String now = serverFresh ? Server.label(s, statsSeen, homeSeen) : "";
+            if (mode.equals("on") && now.equals("online")) {
+                cfg.put(Config.BOOTS, Boot.record(cfg.get(Config.BOOTS), elapsed)); // learn this boot's time
+                cfg.put(POWER_MODE, "");
+            } else if (mode.equals("off") && (now.equals("off") || now.equals("unknown"))) {
+                cfg.put(POWER_MODE, "");
+            } else if (Boot.expired(elapsed)) {
+                cfg.put(POWER_MODE, "");
+            } else {
+                serverStatus.setText(mode.equals("on") ? Boot.label(elapsed, Boot.estimate(cfg.get(Config.BOOTS))) : "Shutting down…");
+                serverStatus.setTextColor(Ui.TEXT);
+                serverStatus.setAlpha(1f);
+                serverRing.set(StatusRing.BUSY);
+                return;
+            }
+        }
         if (!serverFresh) {
             serverStatus.setText("Checking…");
             serverStatus.setTextColor(Ui.DIM);
@@ -279,10 +339,16 @@ public class MainActivity extends Activity {
             return;
         }
         serverStatus.setText("Pressing…");
+        boolean wasOnline = serverFresh && shownServer == State.ON;
         io.execute(() -> {
             try {
                 sb.command(bot, "press");
-                ui(() -> toast("Pressed the server's power button"));
+                cfg.put(POWER_MODE, wasOnline ? "off" : "on");
+                cfg.put(POWER_AT, Long.toString(System.currentTimeMillis()));
+                ui(() -> {
+                    toast("Pressed the server's power button");
+                    followPower();
+                });
             } catch (IOException e) {
                 ui(() -> toast("SwitchBot: " + e.getMessage()));
             }
