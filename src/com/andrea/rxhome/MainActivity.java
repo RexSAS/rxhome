@@ -187,7 +187,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams jfLp = new LinearLayout.LayoutParams(-1, -2);
         jfLp.topMargin = Ui.dp(this, 12);
         tile.addView(openJellyfin, jfLp);
-        showServer(State.valueOf(cfg.prefs.getString("last_server", State.UNREACHABLE.name())), false);
+        paintServer(); // "Checking..." until the first real check (a remembered state could be stale)
         return tile;
     }
 
@@ -197,7 +197,6 @@ public class MainActivity extends Activity {
     private boolean statsSeen; // fresh stats this refresh (not the remembered ones): with Jellyfin silent = starting
 
     private void showServer(State s, boolean fresh) {
-        if (fresh) cfg.prefs.edit().putString("last_server", s.name()).apply();
         shownServer = s;
         if (fresh) serverFresh = true; // the button only shows on a real check, not the remembered state
         paintServer();
@@ -222,6 +221,13 @@ public class MainActivity extends Activity {
         if (s == State.ON) vpnNote = null;
         openJellyfin.setVisibility(s == State.ON && serverFresh && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
             ? View.VISIBLE : View.GONE);
+        if (!serverFresh) {
+            serverStatus.setText("Checking…");
+            serverStatus.setTextColor(Ui.DIM);
+            serverStatus.setAlpha(1f);
+            serverRing.set(StatusRing.BUSY);
+            return;
+        }
         String label = Server.label(s, statsSeen, homeSeen);
         serverStatus.setText(label.equals("online") ? "ONLINE" : label.equals("starting") ? "STARTING…"
             : label.equals("off") ? "OFF" : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
@@ -267,7 +273,7 @@ public class MainActivity extends Activity {
             Ui.reachable(serverStatus, true);
             main.postDelayed(() -> {
                 if (!serverConfirm.armed(android.os.SystemClock.uptimeMillis())) {
-                    showServer(State.valueOf(cfg.prefs.getString("last_server", State.UNREACHABLE.name())), false);
+                    paintServer();
                 }
             }, Confirm.MAX_MS + 50);
             return;
@@ -313,12 +319,12 @@ public class MainActivity extends Activity {
         buttons.addView(remote, lp);
         buttons.addView(apps, new LinearLayout.LayoutParams(0, -2, 1));
         tvTile.addView(buttons);
-        showTv(State.valueOf(cfg.prefs.getString("last_tv", State.UNREACHABLE.name())), false);
+        tvStatus.setText("Checking…"); // until the first real check: a remembered state could be stale
+        tvRing.set(StatusRing.BUSY);
         return tvTile;
     }
 
     private void showTv(State s, boolean fresh) {
-        if (fresh) cfg.prefs.edit().putString("last_tv", s.name()).apply();
         boolean paired = cfg.philips() != null; // then the state is the TV's own, else the FireStick's
         Ui.setText(tvStatus, s == State.ON ? (paired ? "On" : "On · FireStick")
             : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);
