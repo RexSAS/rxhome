@@ -121,7 +121,7 @@ final class Ui {
     /** Grey = unreachable; fades between the two once on screen. */
     static void reachable(View v, boolean yes) {
         float to = yes ? 1f : 0.35f;
-        if (v.isAttachedToWindow()) v.animate().alpha(to).setDuration(200);
+        if (v.isAttachedToWindow()) v.animate().alpha(to).setStartDelay(0).setDuration(200); // no delay: animate() keeps the cascade's start delay otherwise
         else v.setAlpha(to);
     }
 
@@ -188,8 +188,8 @@ final class Ui {
 
     /** A quick "done" pop. */
     static void pop(View v) {
-        v.animate().scaleX(1.06f).scaleY(1.06f).setDuration(120).withEndAction(() ->
-            v.animate().scaleX(1f).scaleY(1f).setDuration(260).setInterpolator(new android.view.animation.OvershootInterpolator(3f)));
+        v.animate().setStartDelay(0).scaleX(1.06f).scaleY(1.06f).setDuration(120).withEndAction(() ->
+            v.animate().setStartDelay(0).scaleX(1f).scaleY(1f).setDuration(260).setInterpolator(new android.view.animation.OvershootInterpolator(3f)));
     }
 
     /** Pressed: shrinks a touch and springs back on release. */
@@ -222,7 +222,7 @@ final class Ui {
         t.setText(s);
         if (t.isAttachedToWindow()) {
             t.setAlpha(0.2f);
-            t.animate().alpha(1f).setDuration(200);
+            t.animate().alpha(1f).setStartDelay(0).setDuration(200);
         }
     }
 }

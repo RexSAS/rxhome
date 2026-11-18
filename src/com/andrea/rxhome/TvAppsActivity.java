@@ -251,7 +251,7 @@ public class TvAppsActivity extends Activity {
             if (isDestroyed()) return;
             v.setAlpha(0f);
             v.setImageBitmap(b);
-            v.animate().alpha(1f).setDuration(300); // pictures fade in as they arrive
+            v.animate().alpha(1f).setStartDelay(0).setDuration(300); // pictures fade in as they arrive
         });
     }
 
