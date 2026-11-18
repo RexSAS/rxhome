@@ -155,6 +155,9 @@ public class SceneEditorActivity extends Activity {
                     chips(tile, Arrays.asList("On", "Off"), s[1].equals("on") ? "On" : "Off", pick -> s[1] = pick.toLowerCase());
                 }
                 break;
+            case "keys":
+                keysPad(tile, i);
+                break;
             case "server":
                 chips(tile, Arrays.asList("On", "Off"), s[1].equals("on") ? "On" : s[1].equals("off") ? "Off" : "",
                     pick -> steps.set(i, new String[] {"server", pick.toLowerCase()}));
@@ -261,6 +264,54 @@ public class SceneEditorActivity extends Activity {
         return out.toArray(new String[0]);
     }
 
+    /** A small remote: each tap adds that key to the step's sequence; Undo / Clear. */
+    private void keysPad(LinearLayout tile, int i) {
+        sub(tile, steps.get(i).length == 1 ? "TAP THE KEYS IN ORDER" : "ADD MORE KEYS");
+        String[][] rows = {{"back", "up", "home"}, {"left", "ok", "right"}, {"menu", "down", "play"}, {"rew", "ff"}};
+        for (String[] row : rows) {
+            LinearLayout r = new LinearLayout(this);
+            for (String k : row) {
+                TextView key = Ui.button(this, Scenes.KEY_LABELS.get(k), k.equals("ok"));
+                key.setTextSize(15);
+                key.setContentDescription("Add " + k);
+                key.setOnClickListener(v -> {
+                    Ui.haptic(v);
+                    String[] st = steps.get(i), more = java.util.Arrays.copyOf(st, st.length + 1);
+                    more[st.length] = k;
+                    steps.set(i, more);
+                    render();
+                });
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+                lp.rightMargin = Ui.dp(this, 6);
+                r.addView(key, lp);
+            }
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-1, -2);
+            rp.topMargin = Ui.dp(this, 6);
+            tile.addView(r, rp);
+        }
+        if (steps.get(i).length > 1) {
+            LinearLayout edit = new LinearLayout(this);
+            TextView undo = Ui.button(this, "UNDO", false);
+            undo.setOnClickListener(v -> {
+                String[] st = steps.get(i);
+                steps.set(i, java.util.Arrays.copyOf(st, st.length - 1));
+                render();
+            });
+            TextView clear = Ui.button(this, "CLEAR", false);
+            clear.setOnClickListener(v -> {
+                steps.set(i, new String[] {"keys"});
+                render();
+            });
+            LinearLayout.LayoutParams ul = new LinearLayout.LayoutParams(0, -2, 1);
+            ul.rightMargin = Ui.dp(this, 6);
+            edit.addView(undo, ul);
+            edit.addView(clear, new LinearLayout.LayoutParams(0, -2, 1));
+            LinearLayout.LayoutParams el = new LinearLayout.LayoutParams(-1, -2);
+            el.topMargin = Ui.dp(this, 10);
+            tile.addView(edit, el);
+        }
+    }
+
     /** A small label inside a step, e.g. "WHAT". */
     private void sub(LinearLayout tile, String text) {
         TextView t = Ui.text(this, text, 11, Ui.DIM, true);
@@ -335,9 +386,9 @@ public class SceneEditorActivity extends Activity {
 
     private void addStep() {
         String[] names = {"Lights", "TV on / off", "Open an app on the TV", "Server must be on / off", "Wait",
-            "Open the remote on the phone"};
+            "Open the remote on the phone", "Remote keys on the TV"};
         String[][] start = {{"light", "all", "on"}, {"tv", "on"}, {"tv", "app", "org.rxfilms.tv"}, {"server", "on"}, {"wait", "5"},
-            {"phone", "remote"}};
+            {"phone", "remote"}, {"keys"}};
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Add a step")
             .setItems(names, (d, w) -> {
@@ -348,7 +399,9 @@ public class SceneEditorActivity extends Activity {
     }
 
     private void save() {
-        Scenes.Scene sc = new Scenes.Scene(Scenes.cleanName(name.getText().toString()), new ArrayList<>(steps));
+        List<String[]> kept = new ArrayList<>();
+        for (String[] st : steps) if (!(st[0].equals("keys") && st.length == 1)) kept.add(st); // no keys recorded: nothing to do
+        Scenes.Scene sc = new Scenes.Scene(Scenes.cleanName(name.getText().toString()), kept);
         if (index >= 0) scenes.set(index, sc);
         else scenes.add(sc);
         store("Saved " + sc.name);

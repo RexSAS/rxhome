@@ -46,6 +46,7 @@ public class SceneRunnerTest {
         @Override void view(String uri, String pkg) { log.add("tv view " + uri); }
         @Override void claudeFm() { log.add("tv play"); }
         @Override void openItem(String component, String id) { log.add("tv item " + id); }
+        @Override synchronized void key(int code) { log.add("key " + code); }
     }
 
     static class FakeBot extends SwitchBot {
@@ -67,6 +68,7 @@ public class SceneRunnerTest {
             return answer;
         }, () -> log.add("phone remote")) {
             @Override void pause(int seconds) { log.add("wait " + seconds); }
+            @Override void keyGap() { log.add("gap"); }
         };
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
 
@@ -128,6 +130,10 @@ public class SceneRunnerTest {
         tvPower = State.ON;
         assert Arrays.equals(run(r, "X: tv on"), new int[] {1, 1}) && log.isEmpty() : log;
         assert Arrays.equals(run(r, "X: tv off"), new int[] {1, 1}) && log.equals(Arrays.asList("tv sleep")) : log;
+
+        // Remote keys: pressed in order, with a gap between them so the TV keeps up.
+        assert Arrays.equals(run(r, "X: keys home down ok"), new int[] {1, 1});
+        assert log.equals(Arrays.asList("key 3", "gap", "key 20", "gap", "key 23")) : log;
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));

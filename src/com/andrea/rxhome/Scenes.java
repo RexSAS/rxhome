@@ -78,6 +78,19 @@ final class Scenes {
         return n.isEmpty() ? "Scene" : n;
     }
 
+    /** Remote keys a scene can press (name → Android keycode), and how the editor shows them. */
+    static final Map<String, Integer> KEYS = new LinkedHashMap<>();
+    static final Map<String, String> KEY_LABELS = new LinkedHashMap<>();
+    static {
+        String[][] k = {{"up", "19", "↑"}, {"down", "20", "↓"}, {"left", "21", "←"}, {"right", "22", "→"},
+            {"ok", "23", "OK"}, {"back", "4", "Back"}, {"home", "3", "Home"}, {"menu", "82", "Menu"},
+            {"play", "85", "⏯"}, {"rew", "89", "◀◀"}, {"ff", "90", "▶▶"}};
+        for (String[] e : k) {
+            KEYS.put(e[0], Integer.valueOf(e[1]));
+            KEY_LABELS.put(e[0], e[2]);
+        }
+    }
+
     private static final Map<String, String> APP_NAMES = new LinkedHashMap<>();
     static {
         APP_NAMES.put("org.rxfilms.tv", "RxFilms");
@@ -140,6 +153,11 @@ final class Scenes {
                 return "Wait " + s[1] + " s";
             case "phone":
                 return "Open the remote on the phone";
+            case "keys": {
+                StringBuilder d = new StringBuilder("Remote:");
+                for (int k = 1; k < s.length; k++) d.append(' ').append(KEY_LABELS.get(s[k]));
+                return d.toString();
+            }
             default:
                 return String.join(" ", s);
         }
@@ -212,6 +230,10 @@ final class Scenes {
                 break;
             case "phone":
                 ok = s.length == 2 && s[1].equals("remote");
+                break;
+            case "keys":
+                ok = s.length >= 2;
+                for (int k = 1; k < s.length; k++) ok &= KEYS.containsKey(s[k]);
                 break;
             default:
                 ok = false;

@@ -95,6 +95,13 @@ class SceneRunner {
             case "wait":
                 pause(Integer.parseInt(s[1]));
                 return true;
+            case "keys":
+                if (tv == null) return false;
+                for (int k = 1; k < s.length; k++) {
+                    if (k > 1) keyGap();
+                    tv.key(Scenes.KEYS.get(s[k]));
+                }
+                return true;
             case "phone":
                 if (openRemote == null) return false;
                 openRemote.run();
@@ -135,6 +142,15 @@ class SceneRunner {
                 if (!what.startsWith("item:")) return false;
                 tv.openItem(FireTv.RXFILMS, what.substring(5));
                 return true;
+        }
+    }
+
+    /** Between remote keys: menus on the TV need a moment to move. */
+    void keyGap() {
+        try {
+            Thread.sleep(400);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 

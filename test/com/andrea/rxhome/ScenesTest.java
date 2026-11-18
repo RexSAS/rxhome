@@ -79,6 +79,14 @@ public class ScenesTest {
         failsOnLine("A: phone dance", 1);
         assert Scenes.describe(new String[] {"phone", "remote"}).equals("Open the remote on the phone");
 
+        // Remote keys: a sequence pressed on the TV, by name.
+        assert Arrays.equals(Scenes.parse("A: keys home down down ok").get(0).steps.get(0),
+            new String[] {"keys", "home", "down", "down", "ok"});
+        failsOnLine("A: keys home jump", 1);
+        failsOnLine("A: keys", 1);
+        assert Scenes.describe(new String[] {"keys", "home", "down", "down", "ok"}).equals("Remote: Home ↓ ↓ OK");
+        assert Scenes.KEYS.get("ok") == 23 && Scenes.KEYS.get("back") == 4 && Scenes.KEYS.get("play") == 85;
+
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");
         assert l.size() == 2;
