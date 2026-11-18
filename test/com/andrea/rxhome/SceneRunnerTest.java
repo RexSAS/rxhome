@@ -56,6 +56,14 @@ public class SceneRunnerTest {
         @Override void command(String id, String cmd) { log.add("bot " + cmd); }
     }
 
+    static class FakeSpotify extends Spotify {
+        FakeSpotify() { super("cid", "r", x -> {}); }
+        @Override List<Spotify.Device> devices() {
+            return Arrays.asList(new Spotify.Device("d1", "Cucina", "Speaker", false), new Spotify.Device("d2", "Echo Dot", "Speaker", true));
+        }
+        @Override void transfer(String id) { log.add("spotify " + id); }
+    }
+
     static int[] run(SceneRunner r, String scene) throws Exception {
         log.clear();
         return r.run(Scenes.parse(scene).get(0));
@@ -140,6 +148,12 @@ public class SceneRunnerTest {
         // TV volume: a level, or mute.
         assert Arrays.equals(run(r, "X: tv volume 20; tv volume mute"), new int[] {2, 2});
         assert log.equals(Arrays.asList("tv volume 20", "tv mute")) : log;
+
+        // Music: moved to the named speaker; an unknown one, or no Spotify, isn't done.
+        assert Arrays.equals(run(r, "X: music Bagno"), new int[] {0, 1}) && log.isEmpty() : log; // not connected
+        r.music(new FakeSpotify());
+        assert Arrays.equals(run(r, "X: music cucina"), new int[] {1, 1}) && log.equals(Arrays.asList("spotify d1")) : log;
+        assert Arrays.equals(run(r, "X: music Bagno"), new int[] {0, 1}) && log.isEmpty() : log;
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));

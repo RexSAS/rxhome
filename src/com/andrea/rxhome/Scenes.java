@@ -154,6 +154,8 @@ final class Scenes {
                 return "Wait " + s[1] + " s";
             case "phone":
                 return "Open the remote on the phone";
+            case "music":
+                return s.length < 2 ? "Music → pick a speaker" : "Music → " + s[1];
             case "keys": {
                 StringBuilder d = new StringBuilder("Remote:");
                 for (int k = 1; k < s.length; k++) d.append(' ').append(KEY_LABELS.get(s[k]));
@@ -233,6 +235,9 @@ final class Scenes {
                 break;
             case "phone":
                 ok = s.length == 2 && s[1].equals("remote");
+                break;
+            case "music": // Spotify moves to this speaker (its name in Spotify)
+                ok = s.length == 2 && !s[1].trim().isEmpty();
                 break;
             case "keys":
                 ok = s.length >= 2;

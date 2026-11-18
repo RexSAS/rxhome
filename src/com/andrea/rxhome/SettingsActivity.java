@@ -67,6 +67,16 @@ public class SettingsActivity extends Activity {
         jfLp.topMargin = Ui.dp(this, 8);
         col.addView(jf, jfLp);
 
+        section(col, "Spotify (move music between speakers)");
+        col.addView(Ui.text(this, "Once: developer.spotify.com → Dashboard → Create app. Redirect URI: http://127.0.0.1:"
+            + Config.SPOTIFY_PORT + "/callback, tick Web API. Copy its Client ID here, then Connect.", 13, Ui.DIM, false));
+        field(col, Config.SPOTIFY_ID, "Client ID", 0, false);
+        spotifyButton = Ui.button(this, cfg.get(Config.SPOTIFY_REFRESH).isEmpty() ? "CONNECT SPOTIFY" : "CONNECTED · CONNECT AGAIN", false);
+        spotifyButton.setOnClickListener(this::connectSpotify);
+        LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(-1, -2);
+        spLp.topMargin = Ui.dp(this, 8);
+        col.addView(spotifyButton, spLp);
+
         section(col, "Tapo lights");
         field(col, Config.TAPO_EMAIL, "Tapo account email", InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, false);
         field(col, Config.TAPO_PASSWORD, "Tapo account password", 0, true);
@@ -223,6 +233,77 @@ public class SettingsActivity extends Activity {
                 }
             }
         });
+    }
+
+    private TextView spotifyButton;
+    private java.net.ServerSocket spotifyListener;
+
+    /**
+     * Spotify login: the browser shows Spotify's page, which sends the phone's browser back to
+     * http://127.0.0.1:PORT/callback, answered here for up to 5 minutes. PKCE, so no app secret is needed.
+     */
+    private void connectSpotify(View v) {
+        String id = fields.get(Config.SPOTIFY_ID).getText().toString().trim();
+        if (id.isEmpty()) {
+            Toast.makeText(this, "Paste your Spotify app's Client ID first", Toast.LENGTH_LONG).show();
+            return;
+        }
+        cfg.put(Config.SPOTIFY_ID, id);
+        String redirect = "http://127.0.0.1:" + Config.SPOTIFY_PORT + "/callback";
+        String verifier = Spotify.verifier(), state = Spotify.verifier().substring(0, 16);
+        java.net.ServerSocket ss;
+        try {
+            closeListener();
+            ss = new java.net.ServerSocket(Config.SPOTIFY_PORT, 4, java.net.InetAddress.getByName("127.0.0.1"));
+            ss.setSoTimeout(5 * 60_000);
+            spotifyListener = ss;
+        } catch (IOException e) {
+            Toast.makeText(this, "Can't start the Spotify login: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            return;
+        }
+        startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse(Spotify.authorizeUrl(id, redirect, Spotify.challenge(verifier), state))));
+        new Thread(() -> {
+            try (java.net.ServerSocket server = ss) {
+                while (true) {
+                    try (java.net.Socket s = server.accept()) {
+                        String line = new java.io.BufferedReader(new java.io.InputStreamReader(s.getInputStream(), "UTF-8")).readLine();
+                        String code = line == null ? null : Spotify.callbackCode(line, state);
+                        boolean denied = line != null && line.startsWith("GET /callback") && code == null;
+                        String page = code != null ? "rxhome is connected to Spotify."
+                            : denied ? "Spotify login didn't finish. Try Connect again in rxhome." : "";
+                        String html = "<html><body style='background:#0c0c0e;color:#ececf0;font:20px sans-serif;padding:32px'>"
+                            + page + "<p><a style='color:#ff1e3c' href='intent:#Intent;component=com.andrea.rxhome/.MainActivity;end'>"
+                            + "Back to rxhome</a></body></html>";
+                        java.io.OutputStream o = s.getOutputStream();
+                        o.write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n" + html)
+                            .getBytes("UTF-8"));
+                        o.flush();
+                        if (code == null && !denied) continue; // e.g. the browser asking for a favicon
+                        if (code == null) return;
+                        Spotify.Tokens t = Spotify.login(id, code, redirect, verifier);
+                        cfg.put(Config.SPOTIFY_REFRESH, t.refresh);
+                        runOnUiThread(() -> {
+                            spotifyButton.setText("CONNECTED · CONNECT AGAIN");
+                            Toast.makeText(this, "Spotify connected", Toast.LENGTH_LONG).show();
+                        });
+                        return;
+                    }
+                }
+            } catch (IOException e) {
+                if (!ss.isClosed() || e instanceof java.net.SocketTimeoutException) {
+                    runOnUiThread(() -> Toast.makeText(this, "Spotify login: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                }
+            }
+        }, "spotify-login").start();
+    }
+
+    private void closeListener() {
+        try {
+            if (spotifyListener != null) spotifyListener.close();
+        } catch (IOException e) {
+            // Already closed.
+        }
     }
 
     private void pickBot(View v) {

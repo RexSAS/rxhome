@@ -94,6 +94,11 @@ public class ScenesTest {
         assert Scenes.describe(new String[] {"tv", "volume", "20"}).equals("TV volume 20");
         assert Scenes.describe(new String[] {"tv", "volume", "mute"}).equals("TV muted");
 
+        // Music: move Spotify to a speaker, by its name.
+        assert Scenes.parse("A: music Cucina; music \"Echo Dot\"").get(0).steps.size() == 2;
+        failsOnLine("A: music", 1);
+        assert Scenes.describe(new String[] {"music", "Cucina"}).equals("Music → Cucina");
+
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");
         assert l.size() == 2;
