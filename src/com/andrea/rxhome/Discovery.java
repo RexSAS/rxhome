@@ -133,6 +133,14 @@ final class Discovery {
         return r.contains("\"name\"") && r.contains("featuring");
     }
 
+    /** For Settings → TVs: {sticks (ADB open), Philips TVs} on this Wi-Fi. */
+    static List<List<String>> scanTvs(String myIp) {
+        List<String> hosts = subnet(myIp);
+        List<String> sticks = open(hosts, 5555, CONNECT_MS), philips = new java.util.ArrayList<>();
+        for (String h : open(hosts, 1925, CONNECT_MS)) if (isPhilips(h)) philips.add(h);
+        return java.util.Arrays.asList(sticks, philips);
+    }
+
     static boolean isOurFireStick(String ip, KeyPair key) {
         Adb a = new Adb(ip, 5555, key);
         a.offerKey = false;

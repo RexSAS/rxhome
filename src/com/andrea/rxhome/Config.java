@@ -25,10 +25,11 @@ final class Config {
         DEFAULTS.put(SCENES, Scenes.DEFAULT);
     }
 
-    // One FireTv per process, shared by the home and remote screens, so its ADB connections and the
-    // running key helper survive moving between screens.
-    private static FireTv tv;
-    private static String tvHost;
+    // One FireTv per TV per process, shared by the home and remote screens, so its ADB connections and
+    // the running key helper survive moving between screens.
+    private static final Map<String, FireTv> tvCache = new java.util.HashMap<>();
+    private static final Map<String, String> tvCacheHost = new java.util.HashMap<>();
+    static final String TVS = "tvs", NO_STICK = "no-stick.invalid"; // never resolves: "unreachable", like a stick that's off
 
     final SharedPreferences prefs;
     private final Context ctx;
@@ -47,18 +48,52 @@ final class Config {
         prefs.edit().putString(key, value).apply();
     }
 
-    synchronized FireTv tv() {
-        String host = get(FIRETV);
-        if (tv == null || !host.equals(tvHost)) {
-            if (tv != null) tv.close();
-            KeyPair key = adbKey();
-            Adb keysAdb = new Adb(host, 5555, key);
-            keysAdb.authWaitMs = 1500; // only the main connection holds the line for the TV's prompt
-            tv = new FireTv(new Adb(host, 5555, key), keysAdb, helperDex());
-            tvHost = host;
+    /** The TVs (Settings → TVs); before there was a list, the FireStick + Philips as the first TV. */
+    java.util.List<Tvs.Tv> tvs() {
+        return Tvs.orLegacy(get(TVS), get(FIRETV), get(PHILIPS_IP));
+    }
+
+    void saveTvs(java.util.List<Tvs.Tv> tvs) {
+        put(TVS, tvs.isEmpty() ? "-" : Tvs.format(tvs)); // "-": deliberately none (empty would bring back the old single TV)
+    }
+
+    /** A TV by id or name; null or unknown = the first one. Null only with no TVs at all. */
+    Tvs.Tv tvInfo(String idOrName) {
+        java.util.List<Tvs.Tv> l = tvs();
+        Tvs.Tv t = Tvs.find(l, idOrName);
+        return t != null ? t : l.isEmpty() ? null : l.get(0);
+    }
+
+    /** The first TV. */
+    FireTv tv() {
+        return tv(null);
+    }
+
+    /** A TV by id or name (null = the first): its stick for status, keys and apps, its Philips for power and volume. */
+    FireTv tv(String idOrName) {
+        Tvs.Tv t = tvInfo(idOrName);
+        if (t == null) t = new Tvs.Tv("tv1", "Tv", "", "");
+        String host = t.stick.isEmpty() ? NO_STICK : t.stick;
+        synchronized (Config.class) {
+            FireTv tv = tvCache.get(t.id);
+            if (tv == null || !host.equals(tvCacheHost.get(t.id))) {
+                if (tv != null) tv.close();
+                KeyPair key = adbKey();
+                Adb keysAdb = new Adb(host, 5555, key);
+                keysAdb.authWaitMs = 1500; // only the main connection holds the line for the TV's prompt
+                tv = new FireTv(new Adb(host, 5555, key), keysAdb, helperDex());
+                tvCache.put(t.id, tv);
+                tvCacheHost.put(t.id, host);
+            }
+            tv.hasStick = !t.stick.isEmpty();
+            tv.setPhilips(philips(t.id), get(Tvs.key(t.id, PHILIPS_MAC)));
+            return tv;
         }
-        tv.setPhilips(philips(), get(PHILIPS_MAC));
-        return tv;
+    }
+
+    /** A step's TV by name (scenes' "@Name"); null if there's no such TV. */
+    FireTv tvNamed(String name) {
+        return Tvs.find(tvs(), name) == null ? null : tv(name);
     }
 
     /** The key helper built by keys.sh and packed into assets by build.sh; null if missing. */
@@ -73,9 +108,27 @@ final class Config {
         }
     }
 
-    /** Saves what a Wi-Fi scan found (null = not found, keep the old one); true if anything moved. */
+    /**
+     * Saves what a Wi-Fi scan found (null = not found, keep the old one); true if anything moved. With
+     * several TVs there's no telling which moved where, so only a single TV follows its devices.
+     */
     boolean found(Discovery.Found f) {
         boolean changed = false;
+        java.util.List<Tvs.Tv> tvs = tvs();
+        if (!get(TVS).isEmpty() && tvs.size() == 1) {
+            Tvs.Tv t = tvs.get(0);
+            String stick = f.stick != null && !t.stick.isEmpty() ? f.stick : t.stick;
+            String ph = f.tv != null && !t.philips.isEmpty() ? f.tv : t.philips;
+            if (!stick.equals(t.stick) || !ph.equals(t.philips)) {
+                tvs.set(0, new Tvs.Tv(t.id, t.name, stick, ph));
+                saveTvs(tvs);
+                changed = true;
+            }
+        }
+        if (!get(TVS).isEmpty()) {
+            f.stick = null; // the TVs list is what counts now
+            f.tv = null;
+        }
         String[][] pairs = {{SERVER, f.server}, {FIRETV, f.stick}, {PHILIPS_IP, f.tv}};
         for (String[] p : pairs) {
             if (p[1] != null && !p[1].equals(get(p[0]))) {
@@ -89,16 +142,17 @@ final class Config {
     /** Devices that are on whenever home is reachable (not the server: it may be off), as "host:port". */
     java.util.List<String> homeDevices() {
         java.util.List<String> out = new java.util.ArrayList<>();
-        out.add(get(FIRETV) + ":5555");
-        out.add(get(PHILIPS_IP) + ":1925");
+        for (Tvs.Tv t : tvs()) {
+            if (!t.stick.isEmpty()) out.add(t.stick + ":5555");
+            if (!t.philips.isEmpty()) out.add(t.philips + ":1925");
+        }
         for (String ip : Scenes.lights(get(LIGHTS)).values()) out.add(ip + ":80");
         return out;
     }
 
     /** For Settings: where things were found. */
     String foundLine() {
-        return "Found on this Wi-Fi: server " + get(SERVER).replace("http://", "") + " · FireStick " + get(FIRETV)
-            + " · TV " + get(PHILIPS_IP) + ". Found again automatically if they move.";
+        return "Found on this Wi-Fi: server " + get(SERVER).replace("http://", "") + ". Found again automatically if it moves.";
     }
 
     static final String JF_TOKEN = "jellyfin_token", JF_USER = "jellyfin_user", JF_DEVICE = "jellyfin_device";
@@ -116,10 +170,18 @@ final class Config {
         return id;
     }
 
-    /** The Philips TV's own API; null until paired in Settings. */
+    /** The first TV's Philips API; null until paired. */
     Philips philips() {
-        return get(PHILIPS_USER).isEmpty() ? null
-            : new Philips(get(PHILIPS_IP), get(PHILIPS_USER), get(PHILIPS_PASS), get(PHILIPS_CERT));
+        Tvs.Tv t = tvInfo(null);
+        return t == null ? null : philips(t.id);
+    }
+
+    /** A TV's Philips API (its address from the TV list, its pairing per TV); null until paired. */
+    Philips philips(String id) {
+        Tvs.Tv t = tvInfo(id);
+        String user = get(Tvs.key(id, PHILIPS_USER));
+        return t == null || t.philips.isEmpty() || user.isEmpty() ? null
+            : new Philips(t.philips, user, get(Tvs.key(id, PHILIPS_PASS)), get(Tvs.key(id, PHILIPS_CERT)));
     }
 
     /** Null until a token and secret are set. */

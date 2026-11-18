@@ -42,7 +42,7 @@ public class TvAppsActivity extends Activity {
         super.onCreate(state);
         Ui.window(this);
         cfg = new Config(this);
-        tv = cfg.tv();
+        tv = cfg.tv(getIntent().getStringExtra("tv")); // the TV whose card was tapped
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);

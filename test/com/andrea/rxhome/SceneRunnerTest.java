@@ -166,6 +166,20 @@ public class SceneRunnerTest {
         assert Arrays.equals(r.run(Scenes.undo(Scenes.parse("X: music Cucina; light Desk on").get(0))), new int[] {2, 2}) : log;
         assert log.equals(Arrays.asList("spotify pause", "Desk false null null")) : log;
 
+        // A step naming a TV goes to that TV; an unknown TV name isn't done.
+        FakeTv camera = new FakeTv() {
+            @Override void wake() { log.add("camera wake"); }
+            @Override synchronized void key(int code) { log.add("camera key " + code); }
+        };
+        r.tvs(name -> name.equalsIgnoreCase("Camera") ? camera : null);
+        tvPower = State.OFF;
+        assert Arrays.equals(run(r, "X: tv on @Camera; keys home @camera; tv on @Garage; tv on"), new int[] {3, 4}) : log;
+        assert log.equals(Arrays.asList("camera wake", "camera key 3", "tv wake")) : log;
+        answer = "djx"; // "choose when run" on a named TV still asks first
+        run(r, "X: tv on @Camera; tv app com.spotify.tv.android ask @Camera");
+        assert log.get(0).equals("ask com.spotify.tv.android") && log.get(1).equals("camera wake") : log;
+        tvPower = State.ON;
+
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));
         done = run(r, Scenes.format(Arrays.asList(s.get(3))));

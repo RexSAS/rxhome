@@ -35,7 +35,7 @@ public class RemoteActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         Ui.window(this);
-        tv = new Config(this).tv();
+        tv = new Config(this).tv(getIntent().getStringExtra("tv")); // the TV whose card was tapped
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);

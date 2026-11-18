@@ -119,6 +119,28 @@ public class ScenesTest {
         assert undo("All off: tv off; light all off; server off").isEmpty();
         assert undo("M: tv app org.rxfilms.tv; keys home; phone remote; wait 3; server press").isEmpty();
 
+        // Several TVs: a TV step may end with "@Name"; without it, it's the first TV.
+        assert Scenes.parse("A: tv on @Camera; tv app org.rxfilms.tv resume \"@Living room\"; keys home ok @Camera; tv volume 20 @Camera")
+            .get(0).steps.size() == 4;
+        failsOnLine("A: tv on @", 1);
+        failsOnLine("A: tv dance @Camera", 1);
+        failsOnLine("A: light all on @Camera", 1);       // only TV steps name a TV
+        String[] named = Scenes.parse("A: tv on @Camera").get(0).steps.get(0);
+        assert "Camera".equals(Scenes.tvTarget(named)) && Scenes.tvTarget(new String[] {"tv", "on"}) == null;
+        assert Arrays.equals(Scenes.untargeted(named), new String[] {"tv", "on"});
+        assert Scenes.describe(named).equals("TV on · Camera") : Scenes.describe(named);
+        assert Scenes.describe(new String[] {"keys", "home", "@Camera"}).equals("Remote: Home · Camera");
+        // Renaming a TV renames it in the scenes too; other steps and TVs stay as they are.
+        String renamed = Scenes.renameTv("A: tv on @Camera; keys home @camera; tv on @Studio; light Desk on\nB: tv off @Camera\n",
+            "Camera", "Bedroom TV");
+        assert renamed.equals("A: tv on \"@Bedroom TV\"; keys home \"@Bedroom TV\"; tv on @Studio; light Desk on\nB: tv off \"@Bedroom TV\"\n")
+            : renamed;
+        assert Scenes.renameTv("not: valid: [", "A", "B").equals("not: valid: [");   // unreadable: left alone
+
+        // Turning off: each TV the scene turned on.
+        assert undo("M: tv on; tv on @Camera; tv off @Studio; light Desk on").equals("tv off; tv off @Camera; light Desk off")
+            : undo("M: tv on; tv on @Camera");
+
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");
         assert l.size() == 2;

@@ -30,6 +30,17 @@ public class SceneEditorActivity extends Activity {
     private int index;
     private List<Scenes.Scene> scenes;
     private final List<String[]> steps = new ArrayList<>();
+    private final List<String> tvOf = new ArrayList<>(); // per step: the TV it's for, "" = the first TV
+
+    /** The step as saved: with "@TV" when it's for a TV other than the first. */
+    private String[] withTv(int i) {
+        String[] s = steps.get(i);
+        String t = tvOf.get(i);
+        if (t.isEmpty() || !(s[0].equals("tv") || s[0].equals("keys"))) return s;
+        String[] out = Arrays.copyOf(s, s.length + 1);
+        out[s.length] = "@" + t;
+        return out;
+    }
     private EditText name;
     private LinearLayout stepsBox;
 
@@ -46,7 +57,13 @@ public class SceneEditorActivity extends Activity {
         }
         if (index >= scenes.size()) index = -1;
         Scenes.Scene sc = index >= 0 ? scenes.get(index) : null;
-        if (sc != null) for (String[] s : sc.steps) steps.add(s.clone());
+        if (sc != null) {
+            for (String[] s : sc.steps) { // the TV a step names is kept beside it while editing
+                String t = Scenes.tvTarget(s);
+                steps.add(Scenes.untargeted(s).clone());
+                tvOf.add(t == null ? "" : t);
+            }
+        }
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -118,11 +135,11 @@ public class SceneEditorActivity extends Activity {
         LinearLayout tile = Ui.tile(this);
         LinearLayout head = new LinearLayout(this);
         head.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = Ui.text(this, (i + 1) + ". " + Scenes.describe(s), 15, Ui.TEXT, true);
+        TextView title = Ui.text(this, (i + 1) + ". " + Scenes.describe(withTv(i)), 15, Ui.TEXT, true);
         head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         head.addView(small("↑", "Move up", v -> move(i, -1)));
         head.addView(small("↓", "Move down", v -> move(i, 1)));
-        head.addView(small("✕", "Remove step", v -> { steps.remove(i); render(); }));
+        head.addView(small("✕", "Remove step", v -> { steps.remove(i); tvOf.remove(i); render(); }));
         tile.addView(head);
 
         switch (s[0]) {
@@ -159,7 +176,7 @@ public class SceneEditorActivity extends Activity {
                     if (!mute) {
                         slider(tile, 0, 60, Integer.parseInt(s[2]), v -> {
                             s[2] = Integer.toString(v);
-                            title.setText((i + 1) + ". " + Scenes.describe(s));
+                            title.setText((i + 1) + ". " + Scenes.describe(withTv(i)));
                         });
                     }
                 } else if (!s[1].equals("music")) {
@@ -195,11 +212,17 @@ public class SceneEditorActivity extends Activity {
             case "wait":
                 slider(tile, 1, 60, Integer.parseInt(s[1]), v -> {
                     s[1] = Integer.toString(v);
-                    title.setText((i + 1) + ". " + Scenes.describe(s));
+                    title.setText((i + 1) + ". " + Scenes.describe(withTv(i)));
                 });
                 break;
             default:
                 break; // the old Claude FM step: nothing to set
+        }
+        List<Tvs.Tv> tvs = new Config(this).tvs();
+        if ((s[0].equals("tv") || s[0].equals("keys")) && tvs.size() > 1) {
+            sub(tile, "WHICH TV");
+            String first = tvs.get(0).name, now = tvOf.get(i).isEmpty() ? first : tvOf.get(i);
+            chips(tile, Arrays.asList(Tvs.names(tvs)), now, pick -> tvOf.set(i, pick.equals(first) ? "" : pick));
         }
         return tile;
     }
@@ -411,6 +434,7 @@ public class SceneEditorActivity extends Activity {
         int j = i + by;
         if (j < 0 || j >= steps.size()) return;
         steps.add(j, steps.remove(i));
+        tvOf.add(j, tvOf.remove(i));
         render();
     }
 
@@ -423,6 +447,7 @@ public class SceneEditorActivity extends Activity {
             .setTitle("Add a step")
             .setItems(names, (d, w) -> {
                 steps.add(start[w].clone());
+                tvOf.add("");
                 render();
             })
             .show();
@@ -430,8 +455,9 @@ public class SceneEditorActivity extends Activity {
 
     private void save() {
         List<String[]> kept = new ArrayList<>();
-        for (String[] st : steps) {
-            if (!((st[0].equals("keys") || st[0].equals("music")) && st.length == 1)) kept.add(st); // nothing picked: nothing to do
+        for (int i = 0; i < steps.size(); i++) {
+            String[] st = steps.get(i);
+            if (!((st[0].equals("keys") || st[0].equals("music")) && st.length == 1)) kept.add(withTv(i)); // nothing picked: nothing to do
         }
         Scenes.Scene sc = new Scenes.Scene(Scenes.cleanName(name.getText().toString()), kept);
         if (index >= 0) scenes.set(index, sc);

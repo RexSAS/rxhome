@@ -17,6 +17,7 @@ class SceneRunner {
     private final Ask ask;
     private final Runnable openRemote;
     private Spotify spotify;
+    private java.util.function.Function<String, FireTv> tvByName;
 
     /** For "choose when run": shows the choices for an app and returns one (Scenes.contents value or "item:<id>"); null = cancelled. */
     interface Ask {
@@ -41,14 +42,23 @@ class SceneRunner {
         return this;
     }
 
+    /** The TVs by name, for steps ending in "@Name"; unknown name = null (that step isn't done). */
+    SceneRunner tvs(java.util.function.Function<String, FireTv> byName) {
+        tvByName = byName;
+        return this;
+    }
+
     /** Returns {steps done, steps total}. */
     int[] run(Scenes.Scene scene) {
         // "Choose when run" asks right at the start; each pick waits in its step's place. Cancelled = skipped.
         java.util.List<String[]> steps = new java.util.ArrayList<>();
         for (String[] s : scene.steps) {
-            if (s[0].equals("tv") && s.length == 4 && s[1].equals("app") && s[3].equals("ask")) {
-                String pick = ask == null ? null : ask.choose(s[2]);
-                s = pick == null ? new String[] {"skip"} : new String[] {"tv", "app", s[2], pick};
+            String[] b = Scenes.untargeted(s), named = s;
+            if (b[0].equals("tv") && b.length == 4 && b[1].equals("app") && b[3].equals("ask")) {
+                String pick = ask == null ? null : ask.choose(b[2]);
+                String t = Scenes.tvTarget(named);
+                s = pick == null ? new String[] {"skip"}
+                    : t == null ? new String[] {"tv", "app", b[2], pick} : new String[] {"tv", "app", b[2], pick, "@" + t};
             }
             steps.add(s);
         }
@@ -64,6 +74,12 @@ class SceneRunner {
     }
 
     private boolean step(String[] s) throws IOException {
+        FireTv tv = this.tv;
+        String tvName = Scenes.tvTarget(s);
+        if (tvName != null) {
+            tv = tvByName == null ? null : tvByName.apply(tvName);
+            s = Scenes.untargeted(s);
+        }
         switch (s[0]) {
             case "light":
                 Collection<Tapo> targets = s[1].equals("all") ? lights.values()

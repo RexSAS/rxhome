@@ -40,8 +40,7 @@ public class MainActivity extends Activity {
     private Config cfg;
     private int generation;
 
-    private TextView serverStatus, serverStats, tvStatus, openJellyfin;
-    private LinearLayout tvTile;
+    private TextView serverStatus, serverStats, openJellyfin;
     private final Confirm serverConfirm = new Confirm();
     // This refresh's server and FireStick results: both unreachable = away → WireGuard (see Vpn).
     private State genServer, genStick;
@@ -112,8 +111,9 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private LinearLayout lightsSlot, scenesSlot, musicSlot, homeCol;
-    private String shownLights, shownScenes, shownMusic;
+    private LinearLayout lightsSlot, scenesSlot, musicSlot, tvSlot, homeCol;
+    private String shownLights, shownScenes, shownMusic, shownTvs;
+    private final List<TvCard> tvCards = new ArrayList<>();
 
     /** Redraws the lights card and the scenes only when their settings changed (keeps scroll, no flash). */
     private void renderParts() {
@@ -122,6 +122,18 @@ public class MainActivity extends Activity {
             shownLights = l;
             lightsSlot.removeAllViews();
             lightsSlot.addView(lightsTile());
+        }
+        StringBuilder tvKey = new StringBuilder(Tvs.format(cfg.tvs()));
+        for (Tvs.Tv t : cfg.tvs()) tvKey.append('|').append(cfg.philips(t.id) != null); // pairing changes the card
+        if (!tvKey.toString().equals(shownTvs)) {
+            shownTvs = tvKey.toString();
+            tvSlot.removeAllViews();
+            tvCards.clear();
+            for (Tvs.Tv t : cfg.tvs()) {
+                TvCard c = new TvCard(t);
+                tvCards.add(c);
+                tvSlot.addView(c.tile);
+            }
         }
         String m = cfg.spotify() == null ? "" : "connected";
         if (!m.equals(shownMusic)) {
@@ -146,7 +158,9 @@ public class MainActivity extends Activity {
         col.setPadding(p, p, p, p);
         col.addView(header());
         col.addView(serverTile());
-        col.addView(tvTile());
+        tvSlot = new LinearLayout(this);
+        tvSlot.setOrientation(LinearLayout.VERTICAL);
+        col.addView(tvSlot);
         musicSlot = new LinearLayout(this);
         musicSlot.setOrientation(LinearLayout.VERTICAL);
         col.addView(musicSlot);
@@ -158,7 +172,7 @@ public class MainActivity extends Activity {
         col.addView(scenesSlot);
         Ui.animateLayout(col);
         homeCol = col;
-        shownLights = shownScenes = shownMusic = null;
+        shownLights = shownScenes = shownMusic = shownTvs = null;
         renderParts();
         ScrollView s = new ScrollView(this);
         s.setFillViewport(true);
@@ -237,7 +251,7 @@ public class MainActivity extends Activity {
         paintServer();
     }
 
-    private StatusRing serverRing, tvRing;
+    private StatusRing serverRing;
 
     /** A status ring, then its text. */
     private LinearLayout statusLine(StatusRing ring, TextView status) {
@@ -397,65 +411,118 @@ public class MainActivity extends Activity {
 
     // --- TV ---
 
-    private View tvTile() {
-        tvTile = Ui.tile(this);
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout text = new LinearLayout(this);
-        text.setOrientation(LinearLayout.VERTICAL);
-        text.addView(Ui.text(this, "Tv", 18, Ui.TEXT, true));
-        tvStatus = Ui.text(this, "", 13, Ui.DIM, false);
-        tvRing = new StatusRing(this);
-        text.addView(statusLine(tvRing, tvStatus));
-        row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView power = Ui.power(this);
-        power.setOnClickListener(this::tvPower);
-        row.addView(power);
-        tvTile.addView(row);
+    /** One TV's card: its status, power, and (with a stick) its Remote and Apps. */
+    private final class TvCard {
+        final Tvs.Tv info;
+        final LinearLayout tile;
+        final TextView status;
+        final StatusRing ring;
 
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setPadding(0, Ui.dp(this, 12), 0, 0);
-        TextView remote = Ui.button(this, "REMOTE", false);
-        remote.setOnClickListener(v -> startActivity(new Intent(this, RemoteActivity.class)));
-        TextView apps = Ui.button(this, "APPS", false);
-        apps.setOnClickListener(v -> startActivity(new Intent(this, TvAppsActivity.class)));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
-        lp.rightMargin = Ui.dp(this, 8);
-        buttons.addView(remote, lp);
-        buttons.addView(apps, new LinearLayout.LayoutParams(0, -2, 1));
-        tvTile.addView(buttons);
-        tvStatus.setText("Checking…"); // until the first real check: a remembered state could be stale
-        tvRing.set(StatusRing.BUSY);
-        return tvTile;
-    }
+        TvCard(Tvs.Tv info) {
+            this.info = info;
+            tile = Ui.tile(MainActivity.this);
+            LinearLayout row = new LinearLayout(MainActivity.this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout text = new LinearLayout(MainActivity.this);
+            text.setOrientation(LinearLayout.VERTICAL);
+            text.addView(Ui.text(MainActivity.this, info.name, 18, Ui.TEXT, true));
+            status = Ui.text(MainActivity.this, "", 13, Ui.DIM, false);
+            ring = new StatusRing(MainActivity.this);
+            text.addView(statusLine(ring, status));
+            row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView power = Ui.power(MainActivity.this);
+            power.setContentDescription(info.name + " power");
+            power.setOnClickListener(this::power);
+            row.addView(power);
+            tile.addView(row);
 
-    private void showTv(State s, boolean fresh) {
-        boolean paired = cfg.philips() != null; // then the state is the TV's own, else the FireStick's
-        Ui.setText(tvStatus, s == State.ON ? (paired ? "On" : "On · FireStick")
-            : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);
-        tvStatus.setTextColor(s == State.ON ? Ui.GREEN : s == State.OFF ? Ui.RED : Ui.DIM);
-        tvRing.set(s == State.ON ? StatusRing.ON : s == State.OFF ? StatusRing.OFF : StatusRing.UNKNOWN);
-        Ui.reachable(tvTile, s != State.UNREACHABLE);
-    }
-
-    private void tvPower(View v) {
-        Ui.haptic(v);
-        Ui.burst(v);
-        tvStatus.setText("…");
-        FireTv tv = cfg.tv();
-        io.execute(() -> {
-            try {
-                tv.togglePower(tv.state());
-            } catch (IOException e) {
-                ui(() -> toast(adbError(e)));
+            if (!info.stick.isEmpty()) { // the remote and apps go through the stick
+                LinearLayout buttons = new LinearLayout(MainActivity.this);
+                buttons.setPadding(0, Ui.dp(MainActivity.this, 12), 0, 0);
+                TextView remote = Ui.button(MainActivity.this, "REMOTE", false);
+                remote.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, RemoteActivity.class).putExtra("tv", info.id)));
+                TextView apps = Ui.button(MainActivity.this, "APPS", false);
+                apps.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, TvAppsActivity.class).putExtra("tv", info.id)));
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+                lp.rightMargin = Ui.dp(MainActivity.this, 8);
+                buttons.addView(remote, lp);
+                buttons.addView(apps, new LinearLayout.LayoutParams(0, -2, 1));
+                tile.addView(buttons);
+                status.setText("Checking…"); // until the first real check: a remembered state could be stale
+                ring.set(StatusRing.BUSY);
+            } else {
+                status.setText(cfg.philips(info.id) != null ? "Power and volume (add a FireStick for its status)"
+                    : "Pair its Philips in Settings → TVs");
+                ring.set(StatusRing.UNKNOWN);
             }
-            State s = tv.tvState(tv.state());
-            ui(() -> {
-                showTv(s, true);
-                main.postDelayed(this::refresh, 4000); // the TV takes a few seconds to switch
-                main.postDelayed(this::refresh, 10000);
+        }
+
+        void show(State s) {
+            boolean paired = cfg.philips(info.id) != null; // then the state is the TV's own, else the stick's
+            Ui.setText(status, s == State.ON ? (paired ? "On" : "On · FireStick")
+                : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);
+            status.setTextColor(s == State.ON ? Ui.GREEN : s == State.OFF ? Ui.RED : Ui.DIM);
+            ring.set(s == State.ON ? StatusRing.ON : s == State.OFF ? StatusRing.OFF : StatusRing.UNKNOWN);
+            Ui.reachable(tile, s != State.UNREACHABLE);
+        }
+
+        void power(View v) {
+            Ui.haptic(v);
+            Ui.burst(v);
+            FireTv tv = cfg.tv(info.id);
+            if (!info.stick.isEmpty()) status.setText("…");
+            io.execute(() -> {
+                try {
+                    tv.togglePower(tv.state());
+                } catch (IOException e) {
+                    ui(() -> toast(info.stick.isEmpty() ? e.getMessage() : adbError(e)));
+                }
+                if (info.stick.isEmpty()) return; // no stick: nothing tells on from off
+                State s = tv.tvState(tv.state());
+                ui(() -> {
+                    show(s);
+                    main.postDelayed(MainActivity.this::refresh, 4000); // the TV takes a few seconds to switch
+                    main.postDelayed(MainActivity.this::refresh, 10000);
+                });
             });
-        });
+        }
+
+        /** The stick's state (and the TV's through it); the first TV with a stick also tells if we're home. */
+        void check(int gen, boolean main) {
+            if (info.stick.isEmpty()) return;
+            FireTv tv = cfg.tv(info.id);
+            tv.onKeyPrompt(() -> ui(() -> {
+                Ui.reachable(tile, true);
+                status.setText("On the TV: tick \"Always allow\", then Allow");
+                status.setTextColor(Ui.RED);
+            }));
+            io.execute(() -> {
+                try {
+                    State stick = tv.checkedState();
+                    State s = tv.tvState(stick);
+                    ui(() -> {
+                        if (gen != generation) return;
+                        show(s);
+                        if (main) {
+                            genStick = stick;
+                            afterChecks();
+                        }
+                    });
+                } catch (IOException e) {
+                    // A key prompt means the stick answered: we're home.
+                    State stick = e instanceof Adb.AdbAuthException ? State.ON : State.UNREACHABLE;
+                    ui(() -> {
+                        if (gen != generation) return;
+                        show(State.UNREACHABLE);
+                        status.setText(adbError(e));
+                        if (main) {
+                            genStick = stick;
+                            afterChecks();
+                        }
+                    });
+                }
+            });
+        }
     }
 
     static String adbError(IOException e) {
@@ -1020,7 +1087,8 @@ public class MainActivity extends Activity {
         SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
             () -> Server.effective(Server.status(server, pub), Metrics.fetch(metricsUrl(server)) != null),
             cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))))
-            .music(cfg.spotify());
+            .music(cfg.spotify())
+            .tvs(cfg::tvNamed);
         io.execute(() -> {
             int[] r = runner.run(todo);
             ui(() -> {
@@ -1072,34 +1140,10 @@ public class MainActivity extends Activity {
             String stats = Metrics.fetch(metricsUrl(server));
             ui(() -> { if (gen == generation && statsChecks.current(mid)) showStats(stats, true); });
         });
-        FireTv tv = cfg.tv();
-        tv.onKeyPrompt(() -> ui(() -> {
-            Ui.reachable(tvTile, true);
-            tvStatus.setText("On the TV: tick \"Always allow\", then Allow");
-            tvStatus.setTextColor(Ui.RED);
-        }));
-        io.execute(() -> {
-            try {
-                State stick = tv.checkedState();
-                State s = tv.tvState(stick);
-                ui(() -> {
-                    if (gen != generation) return;
-                    showTv(s, true);
-                    genStick = stick;
-                    afterChecks();
-                });
-            } catch (IOException e) {
-                // A key prompt means the stick answered: we're home.
-                State stick = e instanceof Adb.AdbAuthException ? State.ON : State.UNREACHABLE;
-                ui(() -> {
-                    if (gen != generation) return;
-                    showTv(State.UNREACHABLE, true);
-                    tvStatus.setText(adbError(e));
-                    genStick = stick;
-                    afterChecks();
-                });
-            }
-        });
+        TvCard mainTv = null; // the first TV with a stick: its answer also says whether we're home
+        for (TvCard c : tvCards) if (mainTv == null && !c.info.stick.isEmpty()) mainTv = c;
+        for (TvCard c : tvCards) c.check(gen, c == mainTv);
+        if (mainTv == null) genStick = State.ON; // no stick to look for
         for (LightRow r : rows.values()) io.execute(r::load);
         io.execute(this::findLights);
         loadMusic();

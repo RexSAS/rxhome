@@ -132,6 +132,9 @@ class FireTv {
     private volatile Philips philips;
     private volatile String philipsMac;
 
+    /** False for a TV that's only its Philips: no status, remote or apps (those need the stick). */
+    volatile boolean hasStick = true;
+
     void setPhilips(Philips p, String mac) {
         philips = p;
         philipsMac = mac == null || mac.isEmpty() ? null : mac;
@@ -148,7 +151,7 @@ class FireTv {
                 log("standby", e);
             }
         }
-        key(SLEEP);
+        if (hasStick) key(SLEEP);
     }
 
     /**
@@ -171,7 +174,7 @@ class FireTv {
                 // No broadcast here (away from home).
             }
         }
-        key(WAKEUP);
+        if (hasStick) key(WAKEUP);
     }
 
     /**
@@ -216,6 +219,12 @@ class FireTv {
 
     /** The power button: by the TV's state, not the stick's. */
     void togglePower(State stick) throws IOException {
+        if (!hasStick) { // no stick to tell on from off: the Philips' own power key (on its remote it toggles too)
+            Philips p = philips;
+            if (p == null) throw new IOException("Pair this TV's Philips in Settings → TVs");
+            p.key("Standby");
+            return;
+        }
         if (tvState(stick) == State.ON) sleep();
         else wake();
     }

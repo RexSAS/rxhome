@@ -50,14 +50,17 @@ public class SettingsActivity extends Activity {
         pick.setOnClickListener(this::pickBot);
         col.addView(pick);
 
-        section(col, "TV");
         TextView found = Ui.text(this, cfg.foundLine(), 13, Ui.DIM, false);
-        found.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 8));
+        found.setPadding(0, Ui.dp(this, 8), 0, 0);
         col.addView(found);
-        col.addView(Ui.text(this, "Philips TV: pair once (with the TV on) for its volume, mute and power.", 13, Ui.DIM, false));
-        TextView pairTv = Ui.button(this,cfg.get(Config.PHILIPS_USER).isEmpty() ? "PAIR WITH THE TV" : "PAIR WITH THE TV AGAIN", false);
-        pairTv.setOnClickListener(this::pairTv);
-        col.addView(pairTv);
+
+        section(col, "TVs");
+        col.addView(Ui.text(this, "Each TV groups a stick (status, remote, apps) and a Philips (power, volume).", 13, Ui.DIM, false));
+        tvsBox = new LinearLayout(this);
+        tvsBox.setOrientation(LinearLayout.VERTICAL);
+        tvsBox.setPadding(0, Ui.dp(this, 8), 0, 0);
+        Ui.animateLayout(tvsBox);
+        col.addView(tvsBox);
 
         section(col, "Jellyfin (RxFilms shortcuts)");
         col.addView(Ui.text(this, "For Continue watching / Next up in Apps: sign in once with Quick Connect.", 13, Ui.DIM, false));
@@ -132,56 +135,6 @@ public class SettingsActivity extends Activity {
         col.addView(e);
         fields.put(key, e);
         return e;
-    }
-
-    /** The TV shows a PIN; typing it here gives rxhome a login for the TV's own API. */
-    private void pairTv(View v) {
-        io.execute(() -> {
-            try {
-                if (!Discovery.isPhilips(cfg.get(Config.PHILIPS_IP))) { // moved, or never found: look for it
-                    String me = Discovery.wifiIp();
-                    if (me != null) cfg.found(Discovery.find(me, cfg.adbKey()));
-                }
-                String ip = cfg.get(Config.PHILIPS_IP);
-                Philips.Pairing p = Philips.pairRequest(ip);
-                runOnUiThread(() -> askPin(ip, p));
-            } catch (IOException e) {
-                runOnUiThread(() -> Toast.makeText(this, "Can't reach the TV (is it on?): " + e.getMessage(), Toast.LENGTH_LONG).show());
-            }
-        });
-    }
-
-    private void askPin(String ip, Philips.Pairing p) {
-        if (isFinishing()) return;
-        EditText pin = new EditText(this);
-        pin.setInputType(InputType.TYPE_CLASS_NUMBER);
-        pin.setHint("PIN");
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Type the PIN shown on the TV")
-            .setView(pin)
-            .setPositiveButton("Pair", (d, w) -> io.execute(() -> {
-                try {
-                    Philips.pairGrant(ip, p, pin.getText().toString());
-                    String mac = null;
-                    try {
-                        mac = new Philips(ip, p.deviceId, p.authKey, p.certPin).mac();
-                    } catch (IOException e) {
-                        // Without the MAC the TV can still be switched off, just not woken from standby.
-                    }
-                    cfg.put(Config.PHILIPS_IP, ip);
-                    cfg.put(Config.PHILIPS_USER, p.deviceId);
-                    cfg.put(Config.PHILIPS_PASS, p.authKey);
-                    cfg.put(Config.PHILIPS_CERT, p.certPin);
-                    if (mac != null) cfg.put(Config.PHILIPS_MAC, mac);
-                    String done = mac != null ? "Paired with the TV"
-                        : "Paired with the TV (couldn't read its MAC: switching it on may not work)";
-                    runOnUiThread(() -> Toast.makeText(this, done, Toast.LENGTH_LONG).show());
-                } catch (IOException e) {
-                    runOnUiThread(() -> Toast.makeText(this, "Pairing failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
-                }
-            }))
-            .setNegativeButton("Cancel", null)
-            .show();
     }
 
     private volatile boolean signingIn;
@@ -338,6 +291,19 @@ public class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         renderScenes(); // back from the scene editor: show what changed
+        renderTvs();
+    }
+
+    private LinearLayout tvsBox;
+
+    /** A row per TV (tap to edit), then "Add a TV". */
+    private void renderTvs() {
+        tvsBox.removeAllViews();
+        for (Tvs.Tv t : cfg.tvs()) {
+            row(tvsBox, t.name, Tvs.describe(t, cfg.philips(t.id) != null), false,
+                v -> startActivity(new android.content.Intent(this, TvEditorActivity.class).putExtra("tv", t.id)));
+        }
+        row(tvsBox, "+ Add a TV", "", true, v -> startActivity(new android.content.Intent(this, TvEditorActivity.class)));
     }
 
     /** A row per scene (tap to edit), then "Add new scene". */
@@ -353,12 +319,12 @@ public class SettingsActivity extends Activity {
         for (int i = 0; i < list.size(); i++) {
             int index = i;
             Scenes.Scene sc = list.get(i);
-            sceneRow(sc.name, Scenes.summary(sc), false, v -> openEditor(index));
+            row(scenesBox, sc.name, Scenes.summary(sc), false, v -> openEditor(index));
         }
-        sceneRow("+ Add new scene", "", true, v -> openEditor(-1));
+        row(scenesBox, "+ Add new scene", "", true, v -> openEditor(-1));
     }
 
-    private void sceneRow(String title, String sub, boolean add, View.OnClickListener open) {
+    private void row(LinearLayout box, String title, String sub, boolean add, View.OnClickListener open) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setBackground(Ui.button(this, "", add).getBackground());
@@ -373,7 +339,7 @@ public class SettingsActivity extends Activity {
         row.setOnClickListener(open);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.bottomMargin = Ui.dp(this, 8);
-        scenesBox.addView(row, lp);
+        box.addView(row, lp);
     }
 
     private void openEditor(int index) {
