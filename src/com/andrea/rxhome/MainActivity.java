@@ -171,7 +171,7 @@ public class MainActivity extends Activity {
         serverStats = Ui.text(this, "", 13, Ui.TEXT, false);
         serverStats.setFontFeatureSettings("tnum");
         text.addView(serverStats);
-        showStats(cfg.prefs.getString("last_stats", null), false);
+        showStats(null, false); // only fresh stats show: remembered ones flashed up and vanished when the server was off
         row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
         TextView power = Ui.power(this);
         power.setOnClickListener(this::serverPower);
@@ -191,12 +191,14 @@ public class MainActivity extends Activity {
     }
 
     private State shownServer = State.UNREACHABLE;
+    private boolean serverFresh;
     private boolean homeSeen; // other home devices answer: a silent server is off, not unknown
     private boolean statsSeen; // fresh stats this refresh (not the remembered ones): with Jellyfin silent = starting
 
     private void showServer(State s, boolean fresh) {
         if (fresh) cfg.prefs.edit().putString("last_server", s.name()).apply();
         shownServer = s;
+        if (fresh) serverFresh = true; // the button only shows on a real check, not the remembered state
         paintServer();
     }
 
@@ -204,7 +206,7 @@ public class MainActivity extends Activity {
         if (openJellyfin == null) return; // the card is still being built (remembered stats come first)
         State s = shownServer;
         if (s == State.ON) vpnNote = null;
-        openJellyfin.setVisibility(s == State.ON && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
+        openJellyfin.setVisibility(s == State.ON && serverFresh && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
             ? View.VISIBLE : View.GONE);
         String label = Server.label(s, statsSeen, homeSeen);
         serverStatus.setText(label.equals("online") ? "● ONLINE" : label.equals("starting") ? "◐ STARTING…"
@@ -215,7 +217,6 @@ public class MainActivity extends Activity {
 
     /** CPU · temp · RAM · uptime line; hidden when node_exporter can't be reached. */
     private void showStats(String stats, boolean fresh) {
-        if (fresh && stats != null) cfg.prefs.edit().putString("last_stats", stats).apply();
         Ui.setText(serverStats, stats == null ? "" : stats);
         serverStats.setVisibility(stats == null ? View.GONE : View.VISIBLE);
         statsSeen = fresh && stats != null;
