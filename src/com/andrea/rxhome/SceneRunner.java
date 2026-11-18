@@ -43,8 +43,17 @@ class SceneRunner {
 
     /** Returns {steps done, steps total}. */
     int[] run(Scenes.Scene scene) {
-        int done = 0;
+        // "Choose when run" asks right at the start; each pick waits in its step's place. Cancelled = skipped.
+        java.util.List<String[]> steps = new java.util.ArrayList<>();
         for (String[] s : scene.steps) {
+            if (s[0].equals("tv") && s.length == 4 && s[1].equals("app") && s[3].equals("ask")) {
+                String pick = ask == null ? null : ask.choose(s[2]);
+                s = pick == null ? new String[] {"skip"} : new String[] {"tv", "app", s[2], pick};
+            }
+            steps.add(s);
+        }
+        int done = 0;
+        for (String[] s : steps) {
             try {
                 if (step(s)) done++;
             } catch (IOException | RuntimeException e) {
