@@ -17,6 +17,7 @@ class SceneRunner {
     private final Ask ask;
     private final Runnable openRemote;
     private Spotify spotify;
+    private boolean smooth;
     private java.util.function.Function<String, FireTv> tvByName;
 
     /** For "choose when run": shows the choices for an app and returns one (Scenes.contents value or "item:<id>"); null = cancelled. */
@@ -46,6 +47,73 @@ class SceneRunner {
     SceneRunner tvs(java.util.function.Function<String, FireTv> byName) {
         tvByName = byName;
         return this;
+    }
+
+    /** Smooth (swapping scenes, turning one off): lights fade, the TV's sound fades out before it goes off. */
+    SceneRunner smooth(boolean on) {
+        smooth = on;
+        return this;
+    }
+
+    /** Between fade steps: 5 steps ≈ 1.5 s with the lights' own round trips. */
+    void fadeGap() {
+        try {
+            Thread.sleep(250);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Fades these lights together to on/off (and brightness): 5 steps from where each is, then the white
+     * or colour. Returns whether every light took it.
+     */
+    private boolean fade(Collection<Tapo> targets, boolean on, Integer brightness, Integer kelvin, int[] color) {
+        java.util.Map<Tapo, java.util.List<Integer>> plan = new java.util.LinkedHashMap<>();
+        boolean all = true;
+        for (Tapo t : targets) {
+            java.util.List<Integer> lv = new java.util.ArrayList<>();
+            try {
+                org.json.JSONObject i = t.info();
+                int now = i.optBoolean("device_on") ? i.optInt("brightness", 100) : 0;
+                if (!on) {
+                    for (int k = 1; k <= 5 && now > 0; k++) lv.add(Math.max(1, now * (5 - k) / 5));
+                } else if (brightness != null) {
+                    if (now == 0) lv.add(1);
+                    for (int k = 1; k <= 5; k++) lv.add(now + (brightness - now) * k / 5);
+                }
+            } catch (IOException | RuntimeException e) {
+                all = false;
+                continue;
+            }
+            plan.put(t, lv);
+        }
+        int steps = 0;
+        for (java.util.List<Integer> lv : plan.values()) steps = Math.max(steps, lv.size());
+        for (int k = 0; k < steps; k++) {
+            if (k > 0) fadeGap();
+            for (java.util.Iterator<java.util.Map.Entry<Tapo, java.util.List<Integer>>> it = plan.entrySet().iterator(); it.hasNext(); ) {
+                java.util.Map.Entry<Tapo, java.util.List<Integer>> e = it.next();
+                java.util.List<Integer> lv = e.getValue();
+                if (k >= lv.size()) continue;
+                try {
+                    e.getKey().set(true, lv.get(k), on && k == lv.size() - 1 ? kelvin : null);
+                } catch (IOException ex) {
+                    all = false;
+                    it.remove();
+                }
+            }
+        }
+        for (java.util.Map.Entry<Tapo, java.util.List<Integer>> e : plan.entrySet()) {
+            try {
+                if (!on) e.getKey().set(false, null, null);
+                else if (e.getValue().isEmpty()) e.getKey().set(true, null, kelvin); // no level to fade to
+                if (on && color != null) e.getKey().color(color[0], color[1]);
+            } catch (IOException ex) {
+                all = false;
+            }
+        }
+        return all;
     }
 
     /** Returns {steps done, steps total}. */
@@ -89,6 +157,7 @@ class SceneRunner {
                 Integer brightness = s.length >= 4 ? Integer.valueOf(s[3]) : null;
                 int[] color = s.length == 5 ? Scenes.color(s[4]) : null;
                 Integer kelvin = s.length == 5 && color == null ? kelvin(s[4]) : null;
+                if (smooth) return fade(targets, on, brightness, kelvin, color);
                 boolean all = true;
                 for (Tapo t : targets) {
                     try {
@@ -106,7 +175,11 @@ class SceneRunner {
                     boolean want = s[1].equals("on"), isOn = tv.tvState(tv.state()) == State.ON;
                     if (want != isOn) {
                         if (want) tv.wake();
-                        else tv.sleep();
+                        else {
+                            int volume = smooth ? tv.fadeVolume() : -1; // sound fades out, then off
+                            tv.sleep();
+                            if (volume > 0) tv.tvVolume(volume); // back for next time
+                        }
                     }
                 }
                 else if (s[1].equals("app")) return open(s[2], s.length == 4 ? s[3] : "");

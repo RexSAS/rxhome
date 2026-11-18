@@ -14,6 +14,15 @@ public class ScenesTest {
         return s.toString();
     }
 
+    static String swap(String from, String to, java.util.List<String> lights) throws Exception {
+        StringBuilder s = new StringBuilder();
+        for (String[] step : Scenes.swap(Scenes.parse(from).get(0), Scenes.parse(to).get(0), lights).steps) {
+            if (s.length() > 0) s.append("; ");
+            s.append(Scenes.formatStep(step));
+        }
+        return s.toString();
+    }
+
     public static void main(String[] a) throws Exception {
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
         assert s.size() == 4 : s.size();
@@ -130,6 +139,20 @@ public class ScenesTest {
         assert Arrays.equals(Scenes.untargeted(named), new String[] {"tv", "on"});
         assert Scenes.describe(named).equals("TV on · Camera") : Scenes.describe(named);
         assert Scenes.describe(new String[] {"keys", "home", "@Camera"}).equals("Remote: Home · Camera");
+        // Swapping scenes: the old one switches off only what the new one won't use, then the new one runs.
+        java.util.List<String> lightNames = Arrays.asList("Desk", "Strip");
+        assert swap("A: light all on 20; tv on; tv app org.rxfilms.tv", "B: light Desk on 80 color:210,80; music Cucina", lightNames)
+            .equals("tv off; light Strip off; light Desk on 80 color:210,80; music Cucina")
+            : swap("A: light all on 20; tv on", "B: light Desk on 80", lightNames);
+        assert swap("A: light Desk on; music Cucina; tv on", "B: tv on; tv app org.smarttube.stable; light Strip on 50", lightNames)
+            .equals("music-pause; light Desk off; tv on; tv app org.smarttube.stable; light Strip on 50");
+        assert swap("A: light Desk on; tv on", "B: light all on 30", lightNames).equals("tv off; light all on 30");
+        assert swap("A: tv on", "B: tv app org.rxfilms.tv", lightNames).equals("tv app org.rxfilms.tv");   // the TV stays on
+        assert swap("A: tv on @Camera; music Cucina", "B: tv on; music Bagno", lightNames)
+            .equals("tv off @Camera; tv on; music Bagno");                                                   // another TV
+        assert swap("A: light all on", "B: light Desk on", java.util.Collections.<String>emptyList())
+            .equals("light all off; light Desk on");                                                         // lights unknown: all off
+
         // Renaming a TV renames it in the scenes too; other steps and TVs stay as they are.
         String renamed = Scenes.renameTv("A: tv on @Camera; keys home @camera; tv on @Studio; light Desk on\nB: tv off @Camera\n",
             "Camera", "Bedroom TV");

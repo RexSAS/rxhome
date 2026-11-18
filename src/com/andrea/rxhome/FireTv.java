@@ -229,6 +229,26 @@ class FireTv {
         else wake();
     }
 
+    /** Fades the TV's sound down (paired Philips) and returns the level it was at; -1 if it can't. */
+    int fadeVolume() {
+        Philips p = philips;
+        if (p == null) return -1;
+        try {
+            int v = Philips.currentVolume(p.get("audio/volume"));
+            for (int k = 1; k <= 5; k++) {
+                p.setVolume(v * (5 - k) / 5);
+                Thread.sleep(250);
+            }
+            return v;
+        } catch (IOException e) {
+            log("volume fade", e);
+            return -1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return -1;
+        }
+    }
+
     /** The TV's volume to a level (its own 0-60 scale), through the paired Philips. */
     void tvVolume(int level) throws IOException {
         Philips p = philips;

@@ -217,6 +217,44 @@ final class Scenes {
         return new Scene(scene.name, steps);
     }
 
+    /**
+     * From one active scene to another: the old one switches off only what the new one won't use (no TV
+     * off-and-on, no music pause before it moves, lights fade straight to their new level), then the new one.
+     * lightNames: every light, so "all lights off" can spare the ones the new scene sets.
+     */
+    static Scene swap(Scene from, Scene to, java.util.Collection<String> lightNames) {
+        boolean music = false, allLights = false;
+        java.util.Set<String> tvs = new java.util.HashSet<>(), lit = new java.util.HashSet<>();
+        for (String[] s : to.steps) {
+            if (s[0].equals("music")) music = true;
+            else if (s[0].equals("tv")) {
+                String[] b = untargeted(s);
+                if (b[1].equals("on") || b[1].equals("app") || b[1].equals("music")) tvs.add(tvTarget(s) == null ? "" : tvTarget(s));
+            } else if (s[0].equals("light")) {
+                if (s[1].equals("all")) allLights = true;
+                else lit.add(s[1]);
+            }
+        }
+        List<String[]> steps = new ArrayList<>();
+        for (String[] u : undo(from).steps) {
+            if (u[0].equals("music-pause")) {
+                if (!music) steps.add(u);
+            } else if (u[0].equals("tv")) {
+                if (!tvs.contains(tvTarget(u) == null ? "" : tvTarget(u))) steps.add(u);
+            } else if (!allLights) { // a light off
+                if (!u[1].equals("all")) {
+                    if (!lit.contains(u[1])) steps.add(u);
+                } else if (lightNames.isEmpty()) {
+                    steps.add(u);
+                } else {
+                    for (String n : lightNames) if (!lit.contains(n)) steps.add(new String[] {"light", n, "off"});
+                }
+            }
+        }
+        steps.addAll(to.steps);
+        return new Scene(to.name, steps);
+    }
+
     /** The TV a "tv" / "keys" step names with a last "@Name" token; null = the first TV. */
     static String tvTarget(String[] s) {
         if (!(s[0].equals("tv") || s[0].equals("keys")) || s.length < 2 || !s[s.length - 1].startsWith("@")) return null;

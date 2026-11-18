@@ -1078,26 +1078,35 @@ public class MainActivity extends Activity {
         b.setEnabled(false);
         // A scene that switches things on is a toggle: tapped while active, it switches them off instead.
         // One that only switches things off (All off) is a plain button and clears every active scene.
-        Scenes.Scene off = Scenes.undo(scene);
+        // One active scene at a time: another one active means a smooth swap (fades, nothing off-and-on).
+        Scenes.Scene off = Scenes.undo(scene), before = null;
         boolean toggle = !off.steps.isEmpty(), turningOff = toggle && activeScenes().contains(scene.name);
-        Scenes.Scene todo = turningOff ? off : scene;
-        b.setText(turningOff ? "Turning off…" : "Running…");
+        if (toggle && !turningOff) {
+            try {
+                for (Scenes.Scene o : Scenes.parse(cfg.get(Config.SCENES))) {
+                    if (!o.name.equals(scene.name) && activeScenes().contains(o.name)) before = o;
+                }
+            } catch (ParseException e) {
+                // Unreadable scenes: nothing to swap from.
+            }
+        }
+        Scenes.Scene todo = turningOff ? off : before != null ? Scenes.swap(before, scene, cfg.lights().keySet()) : scene;
+        b.setText(turningOff ? "Turning off…" : before != null ? "Switching…" : "Running…");
         android.animation.ValueAnimator shimmer = Ui.shimmer(b);
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
             () -> Server.effective(Server.status(server, pub), Metrics.fetch(metricsUrl(server)) != null),
             cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))))
             .music(cfg.spotify())
-            .tvs(cfg::tvNamed);
+            .tvs(cfg::tvNamed)
+            .smooth(turningOff || before != null);
         io.execute(() -> {
             int[] r = runner.run(todo);
             ui(() -> {
                 shimmer.cancel();
                 Ui.pop(b);
-                java.util.Set<String> act = activeScenes();
-                if (!toggle) act.clear();
-                else if (turningOff) act.remove(scene.name);
-                else act.add(scene.name);
+                java.util.Set<String> act = new java.util.LinkedHashSet<>();
+                if (toggle && !turningOff) act.add(scene.name); // the only active one now
                 saveActive(act);
                 b.setText(r[0] == r[1] ? (turningOff ? "Off" : "Done") : r[0] + "/" + r[1] + " done");
                 main.postDelayed(() -> { b.setText(scene.name); b.setEnabled(true); }, 3000);

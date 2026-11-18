@@ -29,6 +29,13 @@ public class SceneRunnerTest {
             log.add(name + " " + on + " " + brightness + " " + kelvin);
         }
 
+        int level = -1; // what info() reports: -1 off, else on at this brightness
+
+        @Override
+        org.json.JSONObject info() {
+            return new org.json.JSONObject().put("device_on", level >= 0).put("brightness", Math.max(level, 0));
+        }
+
         @Override
         void color(int hue, int saturation) throws IOException {
             if (broken) throw new IOException("unreachable");
@@ -49,6 +56,7 @@ public class SceneRunnerTest {
         @Override synchronized void key(int code) { log.add("key " + code); }
         @Override void tvVolume(int level) { log.add("tv volume " + level); }
         @Override void tvMute() { log.add("tv mute"); }
+        @Override int fadeVolume() { log.add("tv fade"); return 30; }
     }
 
     static class FakeBot extends SwitchBot {
@@ -80,6 +88,7 @@ public class SceneRunnerTest {
         }, () -> log.add("phone remote")) {
             @Override void pause(int seconds) { log.add("wait " + seconds); }
             @Override void keyGap() { log.add("gap"); }
+            @Override void fadeGap() {}
         };
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
 
@@ -179,6 +188,27 @@ public class SceneRunnerTest {
         run(r, "X: tv on @Camera; tv app com.spotify.tv.android ask @Camera");
         assert log.get(0).equals("ask com.spotify.tv.android") && log.get(1).equals("camera wake") : log;
         tvPower = State.ON;
+
+        // Smooth (swaps, turning off): lights fade in steps, the TV's sound fades out before it goes off.
+        r.smooth(true);
+        FakeLight desk = (FakeLight) lights.get("Desk");
+        desk.level = 80;
+        run(r, "X: light Desk off");
+        assert log.equals(Arrays.asList("Desk true 64 null", "Desk true 48 null", "Desk true 32 null", "Desk true 16 null",
+            "Desk true 1 null", "Desk false null null")) : log;
+        desk.level = -1;
+        run(r, "X: light Desk on 50 warm");
+        assert log.equals(Arrays.asList("Desk true 1 null", "Desk true 10 null", "Desk true 20 null", "Desk true 30 null",
+            "Desk true 40 null", "Desk true 50 2700")) : log;
+        desk.level = 20; // already on: from where it is
+        run(r, "X: light Desk on 30 color:210,80");
+        assert log.equals(Arrays.asList("Desk true 22 null", "Desk true 24 null", "Desk true 26 null", "Desk true 28 null",
+            "Desk true 30 null", "Desk color 210 80")) : log;
+        tvPower = State.ON;
+        run(r, "X: tv off");
+        assert log.equals(Arrays.asList("tv fade", "tv sleep", "tv volume 30")) : log; // the sound is back for next time
+        r.smooth(false);
+        desk.level = -1;
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));
