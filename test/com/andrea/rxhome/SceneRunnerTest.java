@@ -10,7 +10,7 @@ import java.util.Map;
 public class SceneRunnerTest {
 
     static final List<String> log = new ArrayList<>();
-    static State stick = State.ON, server = State.ON;
+    static State stick = State.ON, server = State.ON, tvPower = State.OFF;
     static String answer;
 
     static class FakeLight extends Tapo {
@@ -39,6 +39,7 @@ public class SceneRunnerTest {
     static class FakeTv extends FireTv {
         FakeTv() { super(null); }
         @Override State state() { return stick; }
+        @Override State tvState(State s) { return tvPower; }
         @Override void wake() { log.add("tv wake"); }
         @Override void sleep() { log.add("tv sleep"); }
         @Override void launch(String pkg) { log.add("tv launch " + pkg); }
@@ -76,6 +77,7 @@ public class SceneRunnerTest {
         assert log.equals(Arrays.asList("Desk true 20 null", "tv wake", "wait 5", "tv launch org.rxfilms.tv")) : log;
 
         // "warm" is 2700 K; an unknown light name is a skipped step.
+        tvPower = State.ON;
         done = run(r, "X: light Desk on 60 warm; light Nope off; tv off");
         assert Arrays.equals(done, new int[] {2, 3}) : Arrays.toString(done);
         assert log.equals(Arrays.asList("Desk true 60 2700", "tv sleep")) : log;
@@ -117,6 +119,15 @@ public class SceneRunnerTest {
 
         // The remote on the phone opens, the scene goes on.
         assert Arrays.equals(run(r, "X: phone remote; tv off"), new int[] {2, 2}) && log.equals(Arrays.asList("phone remote", "tv sleep")) : log;
+
+        // TV on/off check the TV first, like the server: already there = nothing sent (a second
+        // "off" mustn't turn it on).
+        tvPower = State.OFF;
+        assert Arrays.equals(run(r, "X: tv off"), new int[] {1, 1}) && log.isEmpty() : log;
+        assert Arrays.equals(run(r, "X: tv on"), new int[] {1, 1}) && log.equals(Arrays.asList("tv wake")) : log;
+        tvPower = State.ON;
+        assert Arrays.equals(run(r, "X: tv on"), new int[] {1, 1}) && log.isEmpty() : log;
+        assert Arrays.equals(run(r, "X: tv off"), new int[] {1, 1}) && log.equals(Arrays.asList("tv sleep")) : log;
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));

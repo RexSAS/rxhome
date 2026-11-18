@@ -69,8 +69,14 @@ class SceneRunner {
                 return all;
             case "tv":
                 if (tv == null) return false;
-                if (s[1].equals("on")) tv.wake();
-                else if (s[1].equals("off")) tv.sleep();
+                if (s[1].equals("on") || s[1].equals("off")) {
+                    // Like the server: check first. Sending "off" to a TV that's already off can turn it on.
+                    boolean want = s[1].equals("on"), isOn = tv.tvState(tv.state()) == State.ON;
+                    if (want != isOn) {
+                        if (want) tv.wake();
+                        else tv.sleep();
+                    }
+                }
                 else if (s[1].equals("app")) return open(s[2], s.length == 4 ? s[3] : "");
                 else tv.claudeFm(); // the old "tv music" step
                 return true;
