@@ -82,7 +82,29 @@ public class MainActivity extends Activity {
             }
         }
         refresh();
+        main.removeCallbacks(autoUpdate);
+        main.postDelayed(autoUpdate, AUTO_MS);
     }
+
+    @Override
+    protected void onPause() {
+        main.removeCallbacks(autoUpdate); // only while rxhome is on screen
+        super.onPause();
+    }
+
+    static final long AUTO_MS = 5000;
+
+    /** While on screen: the Music card every 5 s, everything every 15 s (the ↻ button still works too). */
+    private final Runnable autoUpdate = new Runnable() {
+        private int n;
+
+        @Override public void run() {
+            if (isDestroyed()) return;
+            if (++n % 3 == 0) refresh();
+            else loadMusic();
+            main.postDelayed(this, AUTO_MS);
+        }
+    };
 
     @Override
     protected void onDestroy() {
@@ -428,7 +450,11 @@ public class MainActivity extends Activity {
                 ui(() -> toast(adbError(e)));
             }
             State s = tv.tvState(tv.state());
-            ui(() -> showTv(s, true));
+            ui(() -> {
+                showTv(s, true);
+                main.postDelayed(this::refresh, 4000); // the TV takes a few seconds to switch
+                main.postDelayed(this::refresh, 10000);
+            });
         });
     }
 
@@ -496,7 +522,7 @@ public class MainActivity extends Activity {
         void show(boolean on, int brightness, boolean reachable) {
             updating = true;
             toggle.setChecked(on);
-            bar.setProgress(brightness, true);
+            if (!bar.isPressed()) bar.setProgress(brightness, true);
             updating = false;
             Ui.reachable(view, reachable);
             cfg.prefs.edit().putString("light_" + name, (on ? "1," : "0,") + brightness).apply();
@@ -1008,6 +1034,8 @@ public class MainActivity extends Activity {
                 b.setText(r[0] == r[1] ? (turningOff ? "Off" : "Done") : r[0] + "/" + r[1] + " done");
                 main.postDelayed(() -> { b.setText(scene.name); b.setEnabled(true); }, 3000);
                 refresh();
+                main.postDelayed(this::loadMusic, 1500); // Spotify takes a moment to switch speakers
+                main.postDelayed(this::refresh, 4000); // and the TV a few seconds to turn on or off
             });
         });
     }
