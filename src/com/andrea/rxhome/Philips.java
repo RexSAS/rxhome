@@ -29,7 +29,7 @@ import org.json.JSONObject;
  * as the open-source pylips does it. Volume, mute, standby: things the FireStick can't do.
  * The TV's certificate is self-signed, so it's pinned at pairing (SHA-256) and only that one is accepted after.
  */
-class Philips {
+class Philips implements TvApi {
 
     // pylips' shared pairing key (JointSPACE "secret_key").
     private static final String SECRET =
@@ -57,7 +57,8 @@ class Philips {
     }
 
     /** E.g. "VolumeUp", "VolumeDown", "Mute", "Standby". */
-    void key(String key) throws IOException {
+    @Override
+    public void key(String key) throws IOException {
         request("POST", "/6/input/key", "{\"key\":\"" + key + "\"}", ip, user, pass, certPin, null);
     }
 
@@ -65,14 +66,21 @@ class Philips {
     // endpoint answers the same on and in standby. The TV's power is read from HDMI-CEC (FireTv).
 
     /** Sets the TV's volume (its own scale, 0-60 here) and unmutes. */
-    void setVolume(int level) throws IOException {
+    @Override
+    public void setVolume(int level) throws IOException {
         request("POST", "/6/audio/volume", volumeBody(level, false), ip, user, pass, certPin, null);
     }
 
     /** Mutes, keeping the level for when it's unmuted. */
-    void mute() throws IOException {
+    @Override
+    public void mute() throws IOException {
         int now = currentVolume(get("audio/volume"));
         request("POST", "/6/audio/volume", volumeBody(now, true), ip, user, pass, certPin, null);
+    }
+
+    @Override
+    public int currentVolume() throws IOException {
+        return currentVolume(get("audio/volume"));
     }
 
     static String volumeBody(int level, boolean muted) {
@@ -267,7 +275,7 @@ class Philips {
     }
 
     /** Accepts only the certificate with this SHA-256 (or, while pairing, records whichever is shown). */
-    private static javax.net.ssl.SSLSocketFactory pinned(String pin, String[] seenPin) throws IOException {
+    static javax.net.ssl.SSLSocketFactory pinned(String pin, String[] seenPin) throws IOException {
         TrustManager tm = new X509TrustManager() {
             @Override public void checkClientTrusted(X509Certificate[] chain, String auth) throws CertificateException {
                 throw new CertificateException("not a server");

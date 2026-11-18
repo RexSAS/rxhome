@@ -23,7 +23,8 @@ public class TvEditorActivity extends Activity {
     private static final String NONE = "None", FIRESTICK = "The FireStick (HDMI)";
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private Config cfg;
-    private String id, stick, philips;
+    private String id, stick, philips, kind;
+    private final java.util.Map<String, String> kindOf = new java.util.HashMap<>(); // found TV address → brand
     private boolean isNew;
     private final List<String> foundSticks = new ArrayList<>(), foundPhilips = new ArrayList<>();
     private EditText name;
@@ -42,6 +43,8 @@ public class TvEditorActivity extends Activity {
         id = t.id;
         stick = t.stick;
         philips = t.philips;
+        kind = t.kind;
+        if (!philips.isEmpty()) kindOf.put(philips, kind);
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -108,13 +111,19 @@ public class TvEditorActivity extends Activity {
         parts.addView(Ui.text(this, "A FireStick or Android TV (ADB debugging on).", 13, Ui.DIM, false));
         chips(parts, foundSticks, stick, NONE, pick -> stick = pick);
         label(parts, "POWER & VOLUME");
-        parts.addView(Ui.text(this, stick.isEmpty() ? "A Philips TV: its own power, volume and mute."
-            : "The FireStick does it over HDMI (on/off, volume up/down, mute). A paired Philips adds exact volume levels.",
+        parts.addView(Ui.text(this, stick.isEmpty() ? "A Philips, Samsung or LG TV: its own power, volume and mute."
+            : "The FireStick does it over HDMI (on/off, volume up/down, mute). A paired Philips, Samsung or LG TV does it itself.",
             13, Ui.DIM, false));
-        chips(parts, foundPhilips, philips, stick.isEmpty() ? NONE : FIRESTICK, pick -> philips = pick);
+        chips(parts, foundPhilips, philips, stick.isEmpty() ? NONE : FIRESTICK, pick -> {
+            philips = pick;
+            kind = kindOf.getOrDefault(pick, Tvs.PHILIPS);
+        });
         if (!philips.isEmpty()) {
-            boolean paired = !cfg.get(Tvs.key(id, Config.PHILIPS_USER)).isEmpty();
-            TextView pair = Ui.button(this, paired ? "PAIRED · PAIR AGAIN" : "PAIR WITH THIS PHILIPS (TV ON)", false);
+            String brand = Tvs.brand(kind);
+            boolean paired = !cfg.get(Tvs.key(id, kind.equals(Tvs.LG) ? Config.LG_KEY
+                : kind.equals(Tvs.SAMSUNG) ? Config.TV_CERT : Config.PHILIPS_USER)).isEmpty();
+            TextView pair = Ui.button(this, paired ? "PAIRED · PAIR AGAIN"
+                : kind.equals(Tvs.PHILIPS) ? "PAIR WITH THIS PHILIPS (TV ON)" : "PAIR WITH THIS " + brand.toUpperCase() + " (TV ON, ACCEPT ON THE TV)", false);
             pair.setOnClickListener(v -> pair());
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
             lp.topMargin = Ui.dp(this, 10);
@@ -134,7 +143,8 @@ public class TvEditorActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         for (String c : choices) {
             boolean on = c.equals(current);
-            String label = c.isEmpty() ? noneLabel : cfg.deviceName(c);
+            String label = c.isEmpty() ? noneLabel
+                : cfg.deviceName(c) + (kindOf.containsKey(c) && !cfg.deviceName(c).contains(Tvs.brand(kindOf.get(c))) ? " · " + Tvs.brand(kindOf.get(c)) : "");
             TextView chip = Ui.button(this, label, on);
             chip.setTextSize(13);
             chip.setContentDescription(label + (c.isEmpty() ? "" : ", " + c) + (on ? ", selected" : ""));
@@ -164,6 +174,8 @@ public class TvEditorActivity extends Activity {
             if (found != null) { // their own names, for the chips and the TV list
                 for (String ip : found.get(0)) cfg.nameDevice(ip, Discovery.readStickName(ip, cfg.adbKey()));
                 for (String ip : found.get(1)) cfg.nameDevice(ip, Discovery.readPhilipsName(ip));
+                for (String ip : found.get(2)) cfg.nameDevice(ip, Samsung.name(Samsung.info(ip)));
+                for (String ip : found.get(3)) cfg.nameDevice(ip, "LG TV");
             }
             runOnUiThread(() -> {
                 if (isFinishing()) return;
@@ -176,15 +188,25 @@ public class TvEditorActivity extends Activity {
                 foundSticks.clear();
                 foundSticks.addAll(found.get(0));
                 foundPhilips.clear();
-                foundPhilips.addAll(found.get(1));
+                String[] kinds = {null, Tvs.PHILIPS, Tvs.SAMSUNG, Tvs.LG};
+                for (int k = 1; k <= 3; k++) {
+                    for (String ip : found.get(k)) {
+                        foundPhilips.add(ip);
+                        kindOf.put(ip, kinds[k]);
+                    }
+                }
                 renderParts();
             });
         });
     }
 
-    /** The Philips shows a PIN; typing it gives rxhome a login for this TV's own API. */
+    /** Philips: a PIN on the TV. Samsung / LG: a prompt on the TV to accept (up to a minute). */
     private void pair() {
         String ip = philips;
+        if (!kind.equals(Tvs.PHILIPS)) {
+            pairPrompt(ip, kind);
+            return;
+        }
         io.execute(() -> {
             try {
                 Philips.Pairing p = Philips.pairRequest(ip);
@@ -192,6 +214,38 @@ public class TvEditorActivity extends Activity {
             } catch (IOException e) {
                 runOnUiThread(() -> Toast.makeText(this, "Can't reach the TV (is it on?): " + e.getMessage(), Toast.LENGTH_LONG).show());
             }
+        });
+    }
+
+    private void pairPrompt(String ip, String brandKind) {
+        String brand = Tvs.brand(brandKind);
+        Toast.makeText(this, "Accept rxhome on the " + brand + " TV's screen", Toast.LENGTH_LONG).show();
+        io.execute(() -> {
+            String msg;
+            try {
+                String mac;
+                if (brandKind.equals(Tvs.LG)) {
+                    Lg.Pairing p = Lg.pair(ip);
+                    cfg.put(Tvs.key(id, Config.LG_KEY), p.clientKey);
+                    cfg.put(Tvs.key(id, Config.TV_CERT), p.certPin);
+                    mac = p.mac;
+                } else {
+                    Samsung.Pairing p = Samsung.pair(ip);
+                    cfg.put(Tvs.key(id, Config.SAMSUNG_TOKEN), p.token);
+                    cfg.put(Tvs.key(id, Config.TV_CERT), p.certPin.isEmpty() ? "-" : p.certPin);
+                    mac = p.mac;
+                }
+                if (mac != null) cfg.put(Tvs.key(id, Config.PHILIPS_MAC), mac);
+                msg = "Paired with the " + brand + " TV" + (mac == null ? " (couldn't read its MAC: switching it on may not work)" : "");
+            } catch (IOException e) {
+                msg = "Pairing failed: " + e.getMessage();
+            }
+            String m = msg;
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                Toast.makeText(this, m, Toast.LENGTH_LONG).show();
+                renderParts();
+            });
         });
     }
 
@@ -238,7 +292,7 @@ public class TvEditorActivity extends Activity {
             Toast.makeText(this, "Another TV is already called " + n + ": scenes find TVs by name", Toast.LENGTH_LONG).show();
             return;
         }
-        Tvs.Tv t = new Tvs.Tv(id, n, stick, philips);
+        Tvs.Tv t = new Tvs.Tv(id, n, stick, philips, philips.isEmpty() ? Tvs.PHILIPS : kind);
         Tvs.Tv old = Tvs.find(tvs, id);
         if (old == null) tvs.add(t);
         else {
@@ -257,7 +311,8 @@ public class TvEditorActivity extends Activity {
                 List<Tvs.Tv> tvs = cfg.tvs();
                 tvs.remove(Tvs.find(tvs, id));
                 cfg.saveTvs(tvs);
-                for (String k : new String[] {Config.PHILIPS_USER, Config.PHILIPS_PASS, Config.PHILIPS_CERT, Config.PHILIPS_MAC}) {
+                for (String k : new String[] {Config.PHILIPS_USER, Config.PHILIPS_PASS, Config.PHILIPS_CERT, Config.PHILIPS_MAC,
+                        Config.LG_KEY, Config.SAMSUNG_TOKEN, Config.TV_CERT}) {
                     cfg.prefs.edit().remove(Tvs.key(id, k)).apply();
                 }
                 finish();

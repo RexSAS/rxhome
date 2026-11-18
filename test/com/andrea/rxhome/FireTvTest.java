@@ -23,7 +23,7 @@ public class FireTvTest {
 
     static Philips philips(boolean broken) {
         return new Philips("x", "u", "p", "c") {
-            @Override void key(String k) throws java.io.IOException {
+            @Override public void key(String k) throws java.io.IOException {
                 if (broken) throw new java.io.IOException("TV asleep");
                 calls.add("tv " + k);
             }

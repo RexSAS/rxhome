@@ -13,6 +13,7 @@ final class TvInstall {
     static final String RXFILMS_RELEASES = "https://api.github.com/repos/RexSAS/RxFilms-Tv-AppInstaller/releases/latest",
         SMARTTUBE_RELEASES = "https://api.github.com/repos/yuliskov/SmartTube/releases/latest";
     static final String RXFILMS_APK = "rxfilms-tv-", SMARTTUBE_APK = "SmartTube_stable";
+    static final String RXVISION_RELEASES = "https://api.github.com/repos/RexSAS/rxVision/releases/latest", RXVISION_APK = "rxVision";
     /** The official YouTube apps: Fire TV's, then Android TV's. */
     static final String[] YOUTUBE = {"com.amazon.firetv.youtube", "com.google.android.youtube.tv"};
 

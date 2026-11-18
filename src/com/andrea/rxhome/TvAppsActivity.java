@@ -76,7 +76,7 @@ public class TvAppsActivity extends Activity {
             return "Playing Claude FM on the TV";
         });
         pictures.execute(() -> show(claude, fetch("https://i.ytimg.com/vi/" + FireTv.claudeFmId() + "/hqdefault_live.jpg")));
-        checkApps(films, spotify, youtube);
+        checkApps(col, films, spotify, youtube);
 
         Ui.cascade(col, 0); // cards rise in one after another
         ScrollView s = new ScrollView(this);
@@ -227,7 +227,7 @@ public class TvAppsActivity extends Activity {
     }
 
     /** What's missing on the TV gets a button in its row; YouTube: which app this TV plays it with. */
-    private void checkApps(LinearLayout films, LinearLayout spotify, LinearLayout youtube) {
+    private void checkApps(LinearLayout col, LinearLayout films, LinearLayout spotify, LinearLayout youtube) {
         io.execute(() -> {
             String[] pkgs;
             try {
@@ -239,6 +239,19 @@ public class TvAppsActivity extends Activity {
             String yt = TvInstall.youtube(pkgs);
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
+                if (!have.contains(FireTv.LAUNCHER)) { // rxVision, the TV's own launcher (and scene fades)
+                    LinearLayout tile = Ui.tile(this);
+                    tile.addView(Ui.text(this, "rxVision", 17, Ui.TEXT, true));
+                    TextView why = Ui.text(this, "The launcher for this TV: home rows from RxFilms, lyrics, and scene fades.", 13, Ui.DIM, false);
+                    why.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 10));
+                    tile.addView(why);
+                    LinearLayout box = new LinearLayout(this);
+                    box.setOrientation(LinearLayout.VERTICAL);
+                    tile.addView(box);
+                    installButton(box, "INSTALL RXVISION ON THE TV",
+                        b -> download(b, TvInstall.RXVISION_RELEASES, TvInstall.RXVISION_APK, "rxVision", () -> col.removeView(tile)));
+                    col.addView(tile, 2); // under the title
+                }
                 if (!have.contains("org.rxfilms.tv")) {
                     installButton(films, "INSTALL RXFILMS ON THE TV",
                         b -> download(b, TvInstall.RXFILMS_RELEASES, TvInstall.RXFILMS_APK, "RxFilms", () -> remove(b)));

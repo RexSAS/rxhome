@@ -129,20 +129,20 @@ class FireTv {
 
     // The TV itself (Fire OS never sends it CEC Standby and its remote's IR is closed to apps): the
     // Philips' own network API, when paired. Its MAC wakes it from standby, when it went off the network.
-    private volatile Philips philips;
+    private volatile TvApi philips; // the TV's own API: Philips, Samsung or LG
     private volatile String philipsMac;
 
     /** False for a TV that's only its Philips: no status, remote or apps (those need the stick). */
     volatile boolean hasStick = true;
 
-    void setPhilips(Philips p, String mac) {
+    void setPhilips(TvApi p, String mac) {
         philips = p;
         philipsMac = mac == null || mac.isEmpty() ? null : mac;
     }
 
     /** TV to standby (if paired and reachable), then the stick to sleep. */
     void sleep() throws IOException {
-        Philips p = philips;
+        TvApi p = philips;
         if (p != null) {
             try {
                 p.key("Standby");
@@ -159,7 +159,7 @@ class FireTv {
      * standby (needs "Switch on with Wi-Fi"), then the stick.
      */
     void wake() throws IOException {
-        Philips p = philips;
+        TvApi p = philips;
         if (p != null) {
             try {
                 p.key("PowerOn");
@@ -232,7 +232,7 @@ class FireTv {
     /** The power button: by the TV's state, not the stick's. */
     void togglePower(State stick) throws IOException {
         if (!hasStick) { // no stick to tell on from off: the Philips' own power key (on its remote it toggles too)
-            Philips p = philips;
+            TvApi p = philips;
             if (p == null) throw new IOException("Pair this TV's Philips in Settings → TVs");
             p.key("Standby");
             return;
@@ -285,10 +285,10 @@ class FireTv {
 
     /** The TV's volume level (a paired Philips), or -1 if it can't be read. */
     int volume() {
-        Philips p = philips;
+        TvApi p = philips;
         if (p == null) return -1;
         try {
-            return Philips.currentVolume(p.get("audio/volume"));
+            return p.currentVolume();
         } catch (IOException | RuntimeException e) {
             return -1;
         }
@@ -306,13 +306,13 @@ class FireTv {
 
     /** The TV's volume to a level (its own 0-60 scale), through the paired Philips. */
     void tvVolume(int level) throws IOException {
-        Philips p = philips;
+        TvApi p = philips;
         if (p == null) throw new IOException("A volume level needs the TV's own controls (a paired Philips): the FireStick only turns it up and down");
         p.setVolume(level);
     }
 
     void tvMute() throws IOException {
-        Philips p = philips;
+        TvApi p = philips;
         if (p == null) key(MUTE);
         else p.mute();
     }
@@ -321,7 +321,7 @@ class FireTv {
 
     /** A key on the TV itself: "VolumeUp", "VolumeDown", "Mute"; without a Philips, the stick's volume keys (HDMI-CEC). */
     void tvKey(String key) throws IOException {
-        Philips p = philips;
+        TvApi p = philips;
         if (p != null) {
             p.key(key);
             return;

@@ -5,19 +5,32 @@ import java.util.List;
 
 /**
  * The TVs: each groups a stick (FireStick / Android TV: status, remote, apps) and the TV's own API
- * (Philips: power, volume), either optional. Stored one per line as "id|name|stick|philips".
+ * (Philips, Samsung or LG: power, volume), either optional. Stored one per line as
+ * "id|name|stick|tv address[|brand]" (no brand = Philips, as before there were others).
  */
 final class Tvs {
 
+    static final String PHILIPS = "philips", SAMSUNG = "samsung", LG = "lg";
+    static final String[] KINDS = {PHILIPS, SAMSUNG, LG};
+
     static final class Tv {
-        final String id, name, stick, philips; // "" = that part isn't set
+        final String id, name, stick, philips, kind; // philips: the TV's own address (any brand); "" = not set
 
         Tv(String id, String name, String stick, String philips) {
+            this(id, name, stick, philips, PHILIPS);
+        }
+
+        Tv(String id, String name, String stick, String philips, String kind) {
             this.id = id;
             this.name = name;
             this.stick = stick;
             this.philips = philips;
+            this.kind = java.util.Arrays.asList(KINDS).contains(kind) ? kind : PHILIPS;
         }
+    }
+
+    static String brand(String kind) {
+        return kind.equals(SAMSUNG) ? "Samsung" : kind.equals(LG) ? "LG" : "Philips";
     }
 
     private Tvs() {}
@@ -26,8 +39,8 @@ final class Tvs {
         List<Tv> out = new ArrayList<>();
         for (String line : text.split("\n")) {
             String[] p = line.split("\\|", -1);
-            if (p.length != 4 || p[0].trim().isEmpty() || p[1].trim().isEmpty()) continue;
-            out.add(new Tv(p[0].trim(), p[1].trim(), p[2].trim(), p[3].trim()));
+            if (p.length < 4 || p.length > 5 || p[0].trim().isEmpty() || p[1].trim().isEmpty()) continue;
+            out.add(new Tv(p[0].trim(), p[1].trim(), p[2].trim(), p[3].trim(), p.length == 5 ? p[4].trim() : PHILIPS));
         }
         return out;
     }
@@ -44,6 +57,7 @@ final class Tvs {
         for (Tv t : tvs) {
             if (s.length() > 0) s.append('\n');
             s.append(t.id).append('|').append(t.name).append('|').append(t.stick).append('|').append(t.philips);
+            if (!t.kind.equals(PHILIPS)) s.append('|').append(t.kind);
         }
         return s.toString();
     }
@@ -81,7 +95,7 @@ final class Tvs {
     static String describe(Tv t, boolean paired, java.util.function.Function<String, String> name) {
         if (t.stick.isEmpty() && t.philips.isEmpty()) return "No devices yet";
         if (t.philips.isEmpty()) return name.apply(t.stick) + " · power and volume through it";
-        String ph = name.apply(t.philips) + (paired ? " (paired)" : " (not paired)");
+        String ph = name.apply(t.philips) + (t.kind.equals(PHILIPS) ? "" : " · " + brand(t.kind)) + (paired ? " (paired)" : " (not paired)");
         return t.stick.isEmpty() ? ph + ": power and volume only" : name.apply(t.stick) + " · " + ph;
     }
 

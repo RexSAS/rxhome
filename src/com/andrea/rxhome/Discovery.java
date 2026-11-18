@@ -171,9 +171,35 @@ final class Discovery {
     /** For Settings → TVs: {sticks (ADB open), Philips TVs} on this Wi-Fi. */
     static List<List<String>> scanTvs(String myIp) {
         List<String> hosts = subnet(myIp);
-        List<String> sticks = open(hosts, 5555, CONNECT_MS), philips = new java.util.ArrayList<>();
+        List<String> sticks = open(hosts, 5555, CONNECT_MS), philips = new java.util.ArrayList<>(),
+            samsung = new java.util.ArrayList<>(), lg = new java.util.ArrayList<>();
         for (String h : open(hosts, 1925, CONNECT_MS)) if (isPhilips(h)) philips.add(h);
-        return java.util.Arrays.asList(sticks, philips);
+        for (String h : open(hosts, 8001, CONNECT_MS)) if (Samsung.isSamsung(Samsung.info(h))) samsung.add(h);
+        java.util.Set<String> webos = new java.util.LinkedHashSet<>(open(hosts, 3000, CONNECT_MS));
+        webos.addAll(open(hosts, 3001, CONNECT_MS));
+        for (String h : webos) if (isLg(h)) lg.add(h);
+        return java.util.Arrays.asList(sticks, philips, samsung, lg);
+    }
+
+    /** LG webOS answers "Hello world" on its remote ports (3000 plain, 3001 TLS on newer firmware). */
+    static boolean isLg(String host) {
+        if (fetch("http://" + host + ":3000/").toLowerCase().contains("hello world")) return true;
+        try { // its own self-signed certificate: just a look, nothing is sent
+            javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection) new URL("https://" + host + ":3001/").openConnection();
+            c.setSSLSocketFactory(Philips.pinned(null, new String[1]));
+            c.setHostnameVerifier((h, s) -> true);
+            c.setConnectTimeout(1500);
+            c.setReadTimeout(2000);
+            try (InputStream in = c.getInputStream()) {
+                byte[] b = new byte[64];
+                int n = in.read(b);
+                return n > 0 && new String(b, 0, n, "UTF-8").toLowerCase().contains("hello world");
+            } finally {
+                c.disconnect();
+            }
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     static boolean isOurFireStick(String ip, KeyPair key) {

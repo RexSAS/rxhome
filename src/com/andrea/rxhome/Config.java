@@ -183,18 +183,35 @@ final class Config {
         return id;
     }
 
-    /** The first TV's Philips API; null until paired. */
-    Philips philips() {
+    /** The first TV's own API (Philips, Samsung or LG); null until paired. */
+    TvApi philips() {
         Tvs.Tv t = tvInfo(null);
         return t == null ? null : philips(t.id);
     }
 
-    /** A TV's Philips API (its address from the TV list, its pairing per TV); null until paired. */
-    Philips philips(String id) {
+    static final String LG_KEY = "lg_key", SAMSUNG_TOKEN = "samsung_token", TV_CERT = "tv_cert"; // per TV (Tvs.key)
+
+    /** A TV's own API by its brand (address from the TV list, pairing per TV); null until paired. */
+    TvApi philips(String id) {
         Tvs.Tv t = tvInfo(id);
-        String user = get(Tvs.key(id, PHILIPS_USER));
-        return t == null || t.philips.isEmpty() || user.isEmpty() ? null
-            : new Philips(t.philips, user, get(Tvs.key(id, PHILIPS_PASS)), get(Tvs.key(id, PHILIPS_CERT)));
+        if (t == null || t.philips.isEmpty()) return null;
+        String tid = t.id;
+        switch (t.kind) {
+            case Tvs.LG: {
+                String key = get(Tvs.key(tid, LG_KEY));
+                return key.isEmpty() ? null : new Lg(t.philips, key, get(Tvs.key(tid, TV_CERT)));
+            }
+            case Tvs.SAMSUNG: {
+                // An empty token is a valid pairing on older models, so "paired" is the pinned certificate.
+                String pin = get(Tvs.key(tid, TV_CERT));
+                return pin.isEmpty() ? null : new Samsung(t.philips, get(Tvs.key(tid, SAMSUNG_TOKEN)), pin.equals("-") ? "" : pin); // "-": paired, no certificate seen
+            }
+            default: {
+                String user = get(Tvs.key(tid, PHILIPS_USER));
+                return user.isEmpty() ? null
+                    : new Philips(t.philips, user, get(Tvs.key(tid, PHILIPS_PASS)), get(Tvs.key(tid, PHILIPS_CERT)));
+            }
+        }
     }
 
     /** Null until a token and secret are set. */
