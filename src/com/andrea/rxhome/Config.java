@@ -29,6 +29,7 @@ final class Config {
     // the running key helper survive moving between screens.
     private static final Map<String, FireTv> tvCache = new java.util.HashMap<>();
     private static final Map<String, String> tvCacheHost = new java.util.HashMap<>();
+    static final String YOUTUBE_APP = "youtube_app"; // per TV: "" = SmartTube, else the official YouTube app's package
     static final String TVS = "tvs", NO_STICK = "no-stick.invalid"; // never resolves: "unreachable", like a stick that's off
 
     final SharedPreferences prefs;
@@ -96,6 +97,8 @@ final class Config {
                 tvCacheHost.put(t.id, host);
             }
             tv.hasStick = !t.stick.isEmpty();
+            String yt = get(Tvs.key(t.id, YOUTUBE_APP));
+            tv.youtube = yt.isEmpty() ? null : yt;
             tv.setPhilips(philips(t.id), get(Tvs.key(t.id, PHILIPS_MAC)));
             return tv;
         }

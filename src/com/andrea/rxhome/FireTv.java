@@ -331,8 +331,49 @@ class FireTv {
     }
 
     void launch(String pkg) throws IOException {
+        pkg = appFor(pkg, youtube);
         safe(pkg); // scene text reaches here ("tv app <package>")
         adb.shell("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1", 5000);
+    }
+
+    /** The YouTube app chosen for this TV (Apps page): null = SmartTube, else the official app's package. */
+    volatile String youtube;
+
+    /** SmartTube's place taken by the official YouTube app when that's this TV's choice. */
+    static String appFor(String pkg, String youtube) {
+        return pkg.equals(SMARTTUBE) && youtube != null ? youtube : pkg;
+    }
+
+    /** Every package on the TV, built-in ones too (Fire TV's YouTube is one). */
+    String[] packages() throws IOException {
+        return adb.shell("pm list packages", 5000).replace("package:", "").trim().split("\\s+");
+    }
+
+    /** The stick's processor (picks the right APK) and whether it's a Fire TV (Amazon's store). */
+    String abi() throws IOException {
+        return adb.shell("getprop ro.product.cpu.abi", 3000).trim();
+    }
+
+    boolean amazon() throws IOException {
+        return adb.shell("getprop ro.product.manufacturer", 3000).trim().equals("Amazon");
+    }
+
+    /** Streams an APK into the TV's installer (no copy on the TV first); returns once it's installed. */
+    void install(java.io.File apk) throws IOException {
+        long size = apk.length();
+        Adb.Stream s = adb.open("exec:cmd package install -S " + size, 10000);
+        byte[] buf = new byte[256 * 1024];
+        try (InputStream in = new java.io.FileInputStream(apk)) {
+            for (int n; (n = in.read(buf)) > 0; ) s.write(buf, n, 30000);
+        }
+        String reply = s.readAll(120000);
+        if (!TvInstall.installed(reply)) throw new IOException("The TV didn't install it: " + reply.trim());
+    }
+
+    /** The app's page in the TV's own store, for the user to confirm there. */
+    void openStore(String pkg) throws IOException {
+        safe(pkg);
+        adb.shell(TvInstall.storeCommand(pkg, amazon()), 5000);
     }
 
     static final String SMARTTUBE = "org.smarttube.stable", SPOTIFY = "com.spotify.tv.android",
@@ -345,9 +386,9 @@ class FireTv {
         play(claudeFmId());
     }
 
-    /** Plays a YouTube video on the TV, in SmartTube. */
+    /** Plays a YouTube video on the TV, in SmartTube or the official app (this TV's choice). */
     void play(String youtubeId) throws IOException {
-        view("https://www.youtube.com/watch?v=" + youtubeId, SMARTTUBE);
+        view("https://www.youtube.com/watch?v=" + youtubeId, appFor(SMARTTUBE, youtube));
     }
 
     /** Opens a link in a TV app, e.g. a Spotify playlist. */

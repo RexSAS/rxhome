@@ -43,6 +43,8 @@ public class TvAppsActivity extends Activity {
         Ui.window(this);
         cfg = new Config(this);
         tv = cfg.tv(getIntent().getStringExtra("tv")); // the TV whose card was tapped
+        Tvs.Tv info = cfg.tvInfo(getIntent().getStringExtra("tv"));
+        tvId = info == null ? "tv1" : info.id;
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
@@ -74,6 +76,7 @@ public class TvAppsActivity extends Activity {
             return "Playing Claude FM on the TV";
         });
         pictures.execute(() -> show(claude, fetch("https://i.ytimg.com/vi/" + FireTv.claudeFmId() + "/hqdefault_live.jpg")));
+        checkApps(films, spotify, youtube);
 
         Ui.cascade(col, 0); // cards rise in one after another
         ScrollView s = new ScrollView(this);
@@ -214,6 +217,192 @@ public class TvAppsActivity extends Activity {
                     // No picture: the card keeps its plain background.
                 }
             });
+        }
+    }
+
+    private String tvId;
+
+    private interface Tap {
+        void on(TextView button);
+    }
+
+    /** What's missing on the TV gets a button in its row; YouTube: which app this TV plays it with. */
+    private void checkApps(LinearLayout films, LinearLayout spotify, LinearLayout youtube) {
+        io.execute(() -> {
+            String[] pkgs;
+            try {
+                pkgs = tv.packages();
+            } catch (IOException e) {
+                return; // the TV isn't reachable: nothing to offer
+            }
+            java.util.Set<String> have = new java.util.HashSet<>(java.util.Arrays.asList(pkgs));
+            String yt = TvInstall.youtube(pkgs);
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                if (!have.contains("org.rxfilms.tv")) {
+                    installButton(films, "INSTALL RXFILMS ON THE TV",
+                        b -> download(b, TvInstall.RXFILMS_RELEASES, TvInstall.RXFILMS_APK, "RxFilms", () -> remove(b)));
+                }
+                if (!have.contains(FireTv.SPOTIFY)) installButton(spotify, "GET SPOTIFY ON THE TV", b -> store(b, FireTv.SPOTIFY, "Spotify"));
+                youtubeChoice(youtube, have.contains(FireTv.SMARTTUBE), yt);
+            });
+        });
+    }
+
+    private TextView installButton(LinearLayout cards, String label, Tap tap) {
+        TextView b = Ui.button(this, label, true);
+        b.setTextSize(12);
+        b.setOnClickListener(v -> {
+            Ui.haptic(v);
+            tap.on(b);
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.bottomMargin = Ui.dp(this, 10);
+        cards.addView(b, 0, lp);
+        return b;
+    }
+
+    private void remove(View v) {
+        if (v.getParent() instanceof LinearLayout) ((LinearLayout) v.getParent()).removeView(v);
+    }
+
+    /** With the official YouTube app on the TV: SmartTube or YouTube (SmartTube is installed when picked). */
+    private void youtubeChoice(LinearLayout cards, boolean hasSmart, String yt) {
+        String key = Tvs.key(tvId, Config.YOUTUBE_APP);
+        if (yt == null) {
+            if (!cfg.get(key).isEmpty()) cfg.put(key, ""); // the official app is gone
+            if (!hasSmart) {
+                installButton(cards, "INSTALL SMARTTUBE ON THE TV",
+                    b -> download(b, TvInstall.SMARTTUBE_RELEASES, TvInstall.SMARTTUBE_APK, "SmartTube", () -> remove(b)));
+            }
+            return;
+        }
+        if (!hasSmart && cfg.get(key).isEmpty()) cfg.put(key, yt); // only YouTube there: use it
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        TextView with = Ui.text(this, "PLAY YOUTUBE WITH", 11, Ui.DIM, true);
+        with.setLetterSpacing(0.08f);
+        box.addView(with);
+        LinearLayout row = new LinearLayout(this);
+        TextView smart = Ui.button(this, hasSmart ? "SmartTube" : "SmartTube ↓", false), off = Ui.button(this, "YouTube", false);
+        smart.setTextSize(13);
+        off.setTextSize(13);
+        Runnable paint = () -> {
+            boolean useYt = cfg.get(key).equals(yt);
+            Ui.style(smart, !useYt);
+            Ui.style(off, useYt);
+            smart.setContentDescription("SmartTube" + (useYt ? "" : ", selected") + (hasSmart ? "" : ", installs it on the TV"));
+            off.setContentDescription("YouTube" + (useYt ? ", selected" : ""));
+            cfg.tv(tvId); // this TV's player follows the choice now
+        };
+        boolean[] smartThere = {hasSmart};
+        smart.setOnClickListener(v -> {
+            Ui.haptic(v);
+            if (smartThere[0]) {
+                cfg.put(key, "");
+                paint.run();
+            } else {
+                download(smart, TvInstall.SMARTTUBE_RELEASES, TvInstall.SMARTTUBE_APK, "SmartTube", () -> {
+                    smartThere[0] = true;
+                    smart.setText("SmartTube");
+                    cfg.put(key, "");
+                    paint.run();
+                });
+            }
+        });
+        off.setOnClickListener(v -> {
+            Ui.haptic(v);
+            cfg.put(key, yt);
+            paint.run();
+        });
+        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, -2, 1);
+        half.rightMargin = Ui.dp(this, 8);
+        row.addView(smart, half);
+        row.addView(off, new LinearLayout.LayoutParams(0, -2, 1));
+        LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
+        rl.topMargin = Ui.dp(this, 6);
+        box.addView(row, rl);
+        paint.run();
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(-1, -2);
+        bl.bottomMargin = Ui.dp(this, 10);
+        cards.addView(box, 0, bl);
+    }
+
+    /** The app's page in the TV's store; the user confirms there with the TV remote. */
+    private void store(TextView b, String pkg, String name) {
+        io.execute(() -> {
+            String msg;
+            try {
+                tv.openStore(pkg);
+                msg = name + " is open in the TV's store: confirm there with the TV remote";
+            } catch (IOException e) {
+                msg = MainActivity.AWAY;
+            }
+            String m = msg;
+            runOnUiThread(() -> { if (!isDestroyed()) Toast.makeText(this, m, Toast.LENGTH_LONG).show(); });
+        });
+    }
+
+    /** Latest release from GitHub → this phone → the TV's installer, with progress on the button. */
+    private void download(TextView b, String releases, String prefix, String name, Runnable done) {
+        CharSequence label = b.getText();
+        b.setEnabled(false);
+        b.setText("FINDING " + name.toUpperCase() + "…");
+        io.execute(() -> {
+            java.io.File f = new java.io.File(getCacheDir(), "tv-install.apk");
+            String msg;
+            boolean ok = false;
+            try {
+                byte[] json = fetch(releases);
+                if (json == null) throw new IOException("GitHub didn't answer");
+                String url = TvInstall.pickApk(new String(json, "UTF-8"), prefix, tv.abi());
+                if (url == null) throw new IOException("no " + name + " download for this TV");
+                save(url, f, pct -> runOnUiThread(() -> b.setText("DOWNLOADING " + name.toUpperCase() + "… " + pct + "%")));
+                runOnUiThread(() -> b.setText("INSTALLING ON THE TV…"));
+                tv.install(f);
+                ok = true;
+                msg = name + " is installed on the TV";
+            } catch (IOException e) {
+                msg = "Couldn't install " + name + ": " + e.getMessage();
+            } finally {
+                f.delete();
+            }
+            boolean installed = ok;
+            String m = msg;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                Toast.makeText(this, m, Toast.LENGTH_LONG).show();
+                b.setEnabled(true);
+                b.setText(label);
+                if (installed) done.run();
+            });
+        });
+    }
+
+    private interface Progress {
+        void at(int percent);
+    }
+
+    /** Downloads to a file, telling the percentage as it goes. */
+    private static void save(String url, java.io.File to, Progress progress) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(8000);
+        c.setReadTimeout(20000);
+        try {
+            if (c.getResponseCode() != 200) throw new IOException("download failed (HTTP " + c.getResponseCode() + ")");
+            long size = c.getContentLengthLong(), got = 0;
+            int last = -1;
+            try (InputStream in = c.getInputStream(); java.io.OutputStream out = new java.io.FileOutputStream(to)) {
+                byte[] b = new byte[64 * 1024];
+                for (int n; (n = in.read(b)) > 0; ) {
+                    out.write(b, 0, n);
+                    got += n;
+                    int pct = size > 0 ? (int) (got * 100 / size) : 0;
+                    if (pct != last) progress.at(last = pct);
+                }
+            }
+        } finally {
+            c.disconnect();
         }
     }
 
