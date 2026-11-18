@@ -206,6 +206,28 @@ final class Config {
     }
 
     /** Null until a token and secret are set. */
+    static final String SPOTIFY_ID = "spotify_client_id", SPOTIFY_REFRESH = "spotify_refresh",
+        SPOTIFY_SPEAKERS = "spotify_speakers"; // speaker names last seen, one per line, for the scene editor
+    static final int SPOTIFY_PORT = 43821; // login reply: http://127.0.0.1:43821/callback, as registered with Spotify
+    private static Spotify spotify;
+    private static String spotifyKey;
+
+    /** One Spotify per process (it keeps the access token and saves renewed logins); null if not connected. */
+    Spotify spotify() {
+        String id = get(SPOTIFY_ID), refresh = get(SPOTIFY_REFRESH);
+        if (id.isEmpty() || refresh.isEmpty()) return null;
+        synchronized (Config.class) {
+            if (spotify == null || !(id + refresh).equals(spotifyKey)) {
+                spotify = new Spotify(id, refresh, r -> {
+                    put(SPOTIFY_REFRESH, r);
+                    synchronized (Config.class) { spotifyKey = id + r; }
+                });
+                spotifyKey = id + refresh;
+            }
+            return spotify;
+        }
+    }
+
     SwitchBot switchBot() {
         return get(SB_TOKEN).isEmpty() || get(SB_SECRET).isEmpty() ? null : new SwitchBot(get(SB_TOKEN), get(SB_SECRET));
     }

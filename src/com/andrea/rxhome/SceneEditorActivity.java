@@ -169,6 +169,18 @@ public class SceneEditorActivity extends Activity {
             case "keys":
                 keysPad(tile, i);
                 break;
+            case "music": {
+                // The speakers the home screen's Music card last saw on Spotify, plus this step's own.
+                List<String> names = new ArrayList<>();
+                for (String n : new Config(this).get(Config.SPOTIFY_SPEAKERS).split("\n")) if (!n.trim().isEmpty()) names.add(n.trim());
+                if (s.length == 2 && !names.contains(s[1])) names.add(0, s[1]);
+                if (names.isEmpty()) {
+                    sub(tile, "CONNECT SPOTIFY IN SETTINGS, THEN OPEN THE HOME SCREEN ONCE TO SEE YOUR SPEAKERS");
+                } else {
+                    chips(tile, names, s.length == 2 ? s[1] : "", pick -> steps.set(i, new String[] {"music", pick}));
+                }
+                break;
+            }
             case "server":
                 chips(tile, Arrays.asList("On", "Off"), s[1].equals("on") ? "On" : s[1].equals("off") ? "Off" : "",
                     pick -> steps.set(i, new String[] {"server", pick.toLowerCase()}));
@@ -397,9 +409,9 @@ public class SceneEditorActivity extends Activity {
 
     private void addStep() {
         String[] names = {"Lights", "TV on / off", "Open an app on the TV", "Server must be on / off", "Wait",
-            "Open the remote on the phone", "Remote keys on the TV", "TV volume"};
+            "Open the remote on the phone", "Remote keys on the TV", "TV volume", "Move music to a speaker"};
         String[][] start = {{"light", "all", "on"}, {"tv", "on"}, {"tv", "app", "org.rxfilms.tv"}, {"server", "on"}, {"wait", "5"},
-            {"phone", "remote"}, {"keys"}, {"tv", "volume", "15"}};
+            {"phone", "remote"}, {"keys"}, {"tv", "volume", "15"}, {"music"}};
         new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle("Add a step")
             .setItems(names, (d, w) -> {
@@ -411,7 +423,9 @@ public class SceneEditorActivity extends Activity {
 
     private void save() {
         List<String[]> kept = new ArrayList<>();
-        for (String[] st : steps) if (!(st[0].equals("keys") && st.length == 1)) kept.add(st); // no keys recorded: nothing to do
+        for (String[] st : steps) {
+            if (!((st[0].equals("keys") || st[0].equals("music")) && st.length == 1)) kept.add(st); // nothing picked: nothing to do
+        }
         Scenes.Scene sc = new Scenes.Scene(Scenes.cleanName(name.getText().toString()), kept);
         if (index >= 0) scenes.set(index, sc);
         else scenes.add(sc);

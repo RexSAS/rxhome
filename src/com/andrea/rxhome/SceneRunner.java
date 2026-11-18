@@ -16,6 +16,7 @@ class SceneRunner {
     private final Jellyfin jf;
     private final Ask ask;
     private final Runnable openRemote;
+    private Spotify spotify;
 
     /** For "choose when run": shows the choices for an app and returns one (Scenes.contents value or "item:<id>"); null = cancelled. */
     interface Ask {
@@ -32,6 +33,12 @@ class SceneRunner {
         this.jf = jf;
         this.ask = ask;
         this.openRemote = openRemote;
+    }
+
+    /** Spotify for "music" steps; null = not connected (those steps aren't done). */
+    SceneRunner music(Spotify spotify) {
+        this.spotify = spotify;
+        return this;
     }
 
     /** Returns {steps done, steps total}. */
@@ -109,6 +116,13 @@ class SceneRunner {
                     tv.key(Scenes.KEYS.get(s[k]));
                 }
                 return true;
+            case "music": {
+                if (spotify == null) return false;
+                Spotify.Device d = Spotify.find(spotify.devices(), s[1]);
+                if (d == null) return false; // that speaker isn't on Spotify right now
+                spotify.transfer(d.id);
+                return true;
+            }
             case "phone":
                 if (openRemote == null) return false;
                 openRemote.run();

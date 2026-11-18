@@ -97,8 +97,8 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 
-    private LinearLayout lightsSlot, scenesSlot, homeCol;
-    private String shownLights, shownScenes;
+    private LinearLayout lightsSlot, scenesSlot, musicSlot, homeCol;
+    private String shownLights, shownScenes, shownMusic;
 
     /** Redraws the lights card and the scenes only when their settings changed (keeps scroll, no flash). */
     private void renderParts() {
@@ -107,6 +107,15 @@ public class MainActivity extends Activity {
             shownLights = l;
             lightsSlot.removeAllViews();
             lightsSlot.addView(lightsTile());
+        }
+        String m = cfg.spotify() == null ? "" : "connected";
+        if (!m.equals(shownMusic)) {
+            shownMusic = m;
+            musicSlot.removeAllViews();
+            if (!m.isEmpty()) {
+                musicSlot.addView(musicTile());
+                loadMusic();
+            }
         }
         if (!s.equals(shownScenes)) {
             shownScenes = s;
@@ -126,6 +135,9 @@ public class MainActivity extends Activity {
         tvBox.setOrientation(LinearLayout.VERTICAL);
         col.addView(tvBox);
         tvCards();
+        musicSlot = new LinearLayout(this);
+        musicSlot.setOrientation(LinearLayout.VERTICAL);
+        col.addView(musicSlot);
         lightsSlot = new LinearLayout(this);
         lightsSlot.setOrientation(LinearLayout.VERTICAL);
         col.addView(lightsSlot);
@@ -134,7 +146,7 @@ public class MainActivity extends Activity {
         col.addView(scenesSlot);
         Ui.animateLayout(col);
         homeCol = col;
-        shownLights = shownScenes = null;
+        shownLights = shownScenes = shownMusic = null;
         renderParts();
         ScrollView s = new ScrollView(this);
         s.setFillViewport(true);
@@ -729,6 +741,79 @@ public class MainActivity extends Activity {
         return tile;
     }
 
+    // --- music (Spotify) ---
+
+    private TextView nowPlaying;
+    private LinearLayout speakers;
+
+    /** What's playing and a chip per speaker on Spotify: tapping one moves the music there. */
+    private View musicTile() {
+        LinearLayout tile = Ui.tile(this);
+        tile.addView(Ui.text(this, "Music", 18, Ui.TEXT, true));
+        nowPlaying = Ui.text(this, "Checking Spotify…", 13, Ui.DIM, false);
+        tile.addView(nowPlaying);
+        speakers = new LinearLayout(this);
+        android.widget.HorizontalScrollView sc = new android.widget.HorizontalScrollView(this);
+        sc.setHorizontalScrollBarEnabled(false);
+        sc.addView(speakers);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = Ui.dp(this, 10);
+        tile.addView(sc, lp);
+        return tile;
+    }
+
+    private void loadMusic() {
+        Spotify sp = cfg.spotify();
+        if (sp == null || nowPlaying == null) return;
+        io.execute(() -> {
+            try {
+                List<Spotify.Device> ds = sp.devices();
+                Spotify.Playing p = sp.playing();
+                ui(() -> paintMusic(ds, p));
+            } catch (IOException e) {
+                ui(() -> Ui.setText(nowPlaying, e.getMessage()));
+            }
+        });
+    }
+
+    private void paintMusic(List<Spotify.Device> ds, Spotify.Playing p) {
+        Ui.setText(nowPlaying, p == null ? "Nothing playing · tap a speaker to start"
+            : (p.playing ? "▶ " : "Paused · ") + p.title + (p.by.isEmpty() ? "" : " — " + p.by)
+                + (p.device.isEmpty() ? "" : " · on " + p.device));
+        speakers.removeAllViews();
+        StringBuilder names = new StringBuilder();
+        for (Spotify.Device d : ds) {
+            names.append(d.name).append('\n');
+            TextView chip = Ui.button(this, d.name, d.active);
+            chip.setTextSize(13);
+            chip.setContentDescription("Move music to " + d.name + (d.active ? ", playing here" : ""));
+            chip.setOnClickListener(v -> moveMusic(chip, d));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            lp.rightMargin = Ui.dp(this, 8);
+            speakers.addView(chip, lp);
+        }
+        if (ds.isEmpty()) {
+            speakers.addView(Ui.text(this, "No speakers on Spotify right now: play Spotify on one once and it shows up", 13, Ui.DIM, false));
+        } else {
+            cfg.put(Config.SPOTIFY_SPEAKERS, names.toString().trim()); // for the scene editor's speaker chips
+        }
+    }
+
+    private void moveMusic(TextView chip, Spotify.Device d) {
+        Spotify sp = cfg.spotify();
+        if (sp == null) return;
+        Ui.haptic(chip);
+        chip.setText("Moving…");
+        io.execute(() -> {
+            try {
+                sp.transfer(d.id);
+            } catch (IOException e) {
+                ui(() -> toast(e.getMessage()));
+            }
+            ui(() -> main.postDelayed(this::loadMusic, 1500)); // Spotify takes a moment to switch
+        });
+    }
+
     // --- scenes ---
 
     private View scenes() {
@@ -813,7 +898,8 @@ public class MainActivity extends Activity {
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
             () -> Server.effective(Server.status(server, pub), Metrics.fetch(metricsUrl(server)) != null),
-            cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))));
+            cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))))
+            .music(cfg.spotify());
         io.execute(() -> {
             int[] r = runner.run(scene);
             ui(() -> {
@@ -898,6 +984,7 @@ public class MainActivity extends Activity {
         }
         for (LightRow r : rows.values()) io.execute(r::load);
         io.execute(this::findLights);
+        loadMusic();
     }
 
     /**
