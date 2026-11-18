@@ -101,7 +101,12 @@ public class FireTvTest {
         } catch (java.io.IOException e) {
             assert e.getMessage().contains("level") : e.getMessage();
         }
-        assert bare.fadeVolume() == -1;
+        // The scene signal for the launcher: one explicit broadcast, names quoted for the shell.
+        assert FireTv.signalCommand("swap", "Movie night", "Kid's room", 1500).equals(
+            "am broadcast -a com.andrea.rxhome.SCENE -p com.andrea.tvlauncher --es event 'swap' --es scene 'Movie night'"
+                + " --ei fade_ms 1500 --es from 'Kid'\\''s room'") : FireTv.signalCommand("swap", "Movie night", "Kid's room", 1500);
+        assert FireTv.signalCommand("tv_off", "All off", null, 1500).equals(
+            "am broadcast -a com.andrea.rxhome.SCENE -p com.andrea.tvlauncher --es event 'tv_off' --es scene 'All off' --ei fade_ms 1500");
 
         // Nothing listens on port 9: unreachable, and fast (the home screen never waits on a dead device).
         long t0 = System.currentTimeMillis();

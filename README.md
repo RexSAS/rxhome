@@ -42,7 +42,21 @@ Open ⚙ Settings:
 
 ## Known limits
 
-- Without pairing the Philips TV, power only sleeps/wakes the FireStick (Fire OS never sends CEC standby; the Alexa remote's infrared is closed to apps), and volume/mute do nothing.
+- Without a paired Philips, power and volume up/down/mute go through the FireStick over HDMI-CEC (if the TV accepts them); exact volume levels need the Philips.
+
+## Signal to the TV launcher
+
+When a scene runs, rxhome tells each TV it uses, through the stick, with an explicit broadcast to the launcher (`com.andrea.tvlauncher`), so the launcher can fade the picture:
+
+```
+am broadcast -a com.andrea.rxhome.SCENE -p com.andrea.tvlauncher
+  --es event   start | swap | off | tv_off
+  --es scene   <scene name>
+  --ei fade_ms 1500
+  --es from    <previous scene>        (swap only)
+```
+
+`start`, `swap` and `off` come as a scene starts, swaps from another one, or is turned off. `tv_off` comes just before rxhome switches that TV off: rxhome then waits `fade_ms` before sending standby, so a fade to black has time to finish. Nothing waits for an answer: without a receiver, the scene runs as before.
 
 - The server status can't tell "off" from "can't reach it" away from home (Cloudflare only lets in allowed IPs), so it shows "unknown" there.
 - Tapo: KLAP (and the older passthrough login) only. TPAP, the SPAKE2+ login of 2025 firmware, isn't implemented; with Third-Party Compatibility on, those devices accept KLAP.

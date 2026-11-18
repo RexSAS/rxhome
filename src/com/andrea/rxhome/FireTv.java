@@ -229,24 +229,24 @@ class FireTv {
         else wake();
     }
 
-    /** Fades the TV's sound down (paired Philips) and returns the level it was at; -1 if it can't. */
-    int fadeVolume() {
-        Philips p = philips;
-        if (p == null) return -1;
-        try {
-            int v = Philips.currentVolume(p.get("audio/volume"));
-            for (int k = 1; k <= 5; k++) {
-                p.setVolume(v * (5 - k) / 5);
-                Thread.sleep(250);
-            }
-            return v;
-        } catch (IOException e) {
-            log("volume fade", e);
-            return -1;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return -1;
-        }
+    static final String SIGNAL = "com.andrea.rxhome.SCENE", LAUNCHER = "com.andrea.tvlauncher";
+
+    /**
+     * Tells the launcher on the TV what rxhome is doing (so it can fade): event "start" / "swap" / "off" (a
+     * scene), "tv_off" (about to switch the TV off: fade now, fade_ms long); from = a swap's previous scene.
+     */
+    void signal(String event, String scene, String from) throws IOException {
+        if (hasStick) adb.shell(signalCommand(event, scene, from, SceneRunner.FADE_MS), 3000);
+    }
+
+    static String signalCommand(String event, String scene, String from, int fadeMs) {
+        return "am broadcast -a " + SIGNAL + " -p " + LAUNCHER + " --es event " + quote(event) + " --es scene " + quote(scene)
+            + " --ei fade_ms " + fadeMs + (from == null ? "" : " --es from " + quote(from));
+    }
+
+    /** For the TV's shell: one word, whatever it holds. */
+    private static String quote(String s) {
+        return "'" + s.replace("'", "'\\''") + "'";
     }
 
     /** The TV's volume to a level (its own 0-60 scale), through the paired Philips. */

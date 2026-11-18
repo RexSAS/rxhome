@@ -55,65 +55,88 @@ class SceneRunner {
         return this;
     }
 
-    /** Between fade steps: 5 steps ≈ 1.5 s with the lights' own round trips. */
-    void fadeGap() {
+    static final int FADE_MS = 1500;
+    private String signalEvent, signalFrom, sceneName;
+
+    /** What to tell the TVs this scene uses (FireTv.signal): "start" / "swap" (from = the previous scene) / "off"; null = nothing. */
+    SceneRunner signal(String event, String from) {
+        signalEvent = event;
+        signalFrom = from;
+        return this;
+    }
+
+    long now() {
+        return System.currentTimeMillis();
+    }
+
+    void waitMs(int ms) {
         try {
-            Thread.sleep(250);
+            Thread.sleep(ms);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
     }
 
-    /**
-     * Fades these lights together to on/off (and brightness): 5 steps from where each is, then the white
-     * or colour. Returns whether every light took it.
-     */
+    /** Between a light's fade steps; its own round trip is most of the pace. */
+    void fadeGap() {
+        waitMs(30);
+    }
+
+    /** A brightness along an eased fade (slow start, slow end): t from 0 to 1. */
+    static int fadeLevel(int from, int to, double t) {
+        t = Math.max(0, Math.min(1, t));
+        double s = t * t * (3 - 2 * t);
+        return (int) Math.round(from + (to - from) * s);
+    }
+
+    /** Fades these lights at the same time (a thread each) to on/off and brightness; true if every light took it. */
     private boolean fade(Collection<Tapo> targets, boolean on, Integer brightness, Integer kelvin, int[] color) {
-        java.util.Map<Tapo, java.util.List<Integer>> plan = new java.util.LinkedHashMap<>();
-        boolean all = true;
+        java.util.concurrent.atomic.AtomicBoolean all = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.List<Thread> threads = new java.util.ArrayList<>();
         for (Tapo t : targets) {
-            java.util.List<Integer> lv = new java.util.ArrayList<>();
+            Thread th = new Thread(() -> { if (!fadeOne(t, on, brightness, kelvin, color)) all.set(false); }, "light-fade");
+            threads.add(th);
+            th.start();
+        }
+        for (Thread th : threads) {
             try {
-                org.json.JSONObject i = t.info();
-                int now = i.optBoolean("device_on") ? i.optInt("brightness", 100) : 0;
-                if (!on) {
-                    for (int k = 1; k <= 5 && now > 0; k++) lv.add(Math.max(1, now * (5 - k) / 5));
-                } else if (brightness != null) {
-                    if (now == 0) lv.add(1);
-                    for (int k = 1; k <= 5; k++) lv.add(now + (brightness - now) * k / 5);
+                th.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return all.get();
+    }
+
+    /** One light: from where it is, a new level as fast as it answers for FADE_MS, then off / white / colour. */
+    private boolean fadeOne(Tapo t, boolean on, Integer brightness, Integer kelvin, int[] color) {
+        try {
+            org.json.JSONObject i = t.info();
+            int from = i.optBoolean("device_on") ? i.optInt("brightness", 100) : on ? 1 : 0;
+            if (on && brightness == null) {
+                t.set(true, null, kelvin); // no level to fade to
+            } else if (from > 0) {
+                int to = on ? brightness : 1, last = -1;
+                long start = now();
+                while (true) {
+                    double f = Math.min(1, (now() - start) / (double) FADE_MS);
+                    int lv = Math.max(1, fadeLevel(from, to, f));
+                    boolean end = f >= 1;
+                    if (lv != last || end) {
+                        t.set(true, lv, end && on ? kelvin : null);
+                        last = lv;
+                    }
+                    if (end) break;
+                    fadeGap();
                 }
-            } catch (IOException | RuntimeException e) {
-                all = false;
-                continue;
             }
-            plan.put(t, lv);
+            if (!on) t.set(false, null, null);
+            else if (color != null) t.color(color[0], color[1]);
+            return true;
+        } catch (IOException | RuntimeException e) {
+            return false;
         }
-        int steps = 0;
-        for (java.util.List<Integer> lv : plan.values()) steps = Math.max(steps, lv.size());
-        for (int k = 0; k < steps; k++) {
-            if (k > 0) fadeGap();
-            for (java.util.Iterator<java.util.Map.Entry<Tapo, java.util.List<Integer>>> it = plan.entrySet().iterator(); it.hasNext(); ) {
-                java.util.Map.Entry<Tapo, java.util.List<Integer>> e = it.next();
-                java.util.List<Integer> lv = e.getValue();
-                if (k >= lv.size()) continue;
-                try {
-                    e.getKey().set(true, lv.get(k), on && k == lv.size() - 1 ? kelvin : null);
-                } catch (IOException ex) {
-                    all = false;
-                    it.remove();
-                }
-            }
-        }
-        for (java.util.Map.Entry<Tapo, java.util.List<Integer>> e : plan.entrySet()) {
-            try {
-                if (!on) e.getKey().set(false, null, null);
-                else if (e.getValue().isEmpty()) e.getKey().set(true, null, kelvin); // no level to fade to
-                if (on && color != null) e.getKey().color(color[0], color[1]);
-            } catch (IOException ex) {
-                all = false;
-            }
-        }
-        return all;
     }
 
     /** Returns {steps done, steps total}. */
@@ -129,6 +152,21 @@ class SceneRunner {
                     : t == null ? new String[] {"tv", "app", b[2], pick} : new String[] {"tv", "app", b[2], pick, "@" + t};
             }
             steps.add(s);
+        }
+        sceneName = scene.name;
+        if (signalEvent != null) { // tell each TV the scene uses, once
+            java.util.Set<FireTv> told = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            for (String[] s : steps) {
+                if (!s[0].equals("tv") && !s[0].equals("keys")) continue;
+                String n = Scenes.tvTarget(s);
+                FireTv t = n == null ? tv : tvByName == null ? null : tvByName.apply(n);
+                if (t == null || !told.add(t)) continue;
+                try {
+                    t.signal(signalEvent, scene.name, signalFrom);
+                } catch (IOException | RuntimeException e) {
+                    // Only a courtesy to the launcher: the scene goes on.
+                }
+            }
         }
         int done = 0;
         for (String[] s : steps) {
@@ -176,9 +214,15 @@ class SceneRunner {
                     if (want != isOn) {
                         if (want) tv.wake();
                         else {
-                            int volume = smooth ? tv.fadeVolume() : -1; // sound fades out, then off
+                            if (signalEvent != null) { // the launcher fades the picture first
+                                try {
+                                    tv.signal("tv_off", sceneName, null);
+                                    waitMs(FADE_MS);
+                                } catch (IOException | RuntimeException e) {
+                                    // No launcher to fade: straight off.
+                                }
+                            }
                             tv.sleep();
-                            if (volume > 0) tv.tvVolume(volume); // back for next time
                         }
                     }
                 }

@@ -9,7 +9,8 @@ import java.util.Map;
 
 public class SceneRunnerTest {
 
-    static final List<String> log = new ArrayList<>();
+    static final List<String> log = new ArrayList<>(), signals = new ArrayList<>();
+    static long clock;
     static State stick = State.ON, server = State.ON, tvPower = State.OFF;
     static String answer;
 
@@ -56,7 +57,9 @@ public class SceneRunnerTest {
         @Override synchronized void key(int code) { log.add("key " + code); }
         @Override void tvVolume(int level) { log.add("tv volume " + level); }
         @Override void tvMute() { log.add("tv mute"); }
-        @Override int fadeVolume() { log.add("tv fade"); return 30; }
+        @Override void signal(String event, String scene, String from) {
+            signals.add(event + " " + scene + (from == null ? "" : " from " + from));
+        }
     }
 
     static class FakeBot extends SwitchBot {
@@ -89,6 +92,8 @@ public class SceneRunnerTest {
             @Override void pause(int seconds) { log.add("wait " + seconds); }
             @Override void keyGap() { log.add("gap"); }
             @Override void fadeGap() {}
+            @Override void waitMs(int ms) { log.add("wait " + ms + " ms"); }
+            @Override long now() { return clock += 300; } // each look at the clock: 300 ms later
         };
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
 
@@ -189,26 +194,38 @@ public class SceneRunnerTest {
         assert log.get(0).equals("ask com.spotify.tv.android") && log.get(1).equals("camera wake") : log;
         tvPower = State.ON;
 
-        // Smooth (swaps, turning off): lights fade in steps, the TV's sound fades out before it goes off.
+        // Smooth (swaps, turning off): lights fade by time (1.5 s, eased), as fast as each light answers.
         r.smooth(true);
         FakeLight desk = (FakeLight) lights.get("Desk");
         desk.level = 80;
         run(r, "X: light Desk off");
-        assert log.equals(Arrays.asList("Desk true 64 null", "Desk true 48 null", "Desk true 32 null", "Desk true 16 null",
+        assert log.equals(Arrays.asList("Desk true 72 null", "Desk true 52 null", "Desk true 29 null", "Desk true 9 null",
             "Desk true 1 null", "Desk false null null")) : log;
         desk.level = -1;
         run(r, "X: light Desk on 50 warm");
-        assert log.equals(Arrays.asList("Desk true 1 null", "Desk true 10 null", "Desk true 20 null", "Desk true 30 null",
-            "Desk true 40 null", "Desk true 50 2700")) : log;
+        assert log.equals(Arrays.asList("Desk true 6 null", "Desk true 18 null", "Desk true 33 null", "Desk true 45 null",
+            "Desk true 50 2700")) : log;
         desk.level = 20; // already on: from where it is
         run(r, "X: light Desk on 30 color:210,80");
-        assert log.equals(Arrays.asList("Desk true 22 null", "Desk true 24 null", "Desk true 26 null", "Desk true 28 null",
+        assert log.equals(Arrays.asList("Desk true 21 null", "Desk true 24 null", "Desk true 26 null", "Desk true 29 null",
             "Desk true 30 null", "Desk color 210 80")) : log;
-        tvPower = State.ON;
-        run(r, "X: tv off");
-        assert log.equals(Arrays.asList("tv fade", "tv sleep", "tv volume 30")) : log; // the sound is back for next time
+        assert SceneRunner.fadeLevel(80, 1, 0) == 80 && SceneRunner.fadeLevel(80, 1, 1) == 1 && SceneRunner.fadeLevel(0, 100, 0.5) == 50;
         r.smooth(false);
         desk.level = -1;
+
+        // The TV hears about scenes (for the launcher's own fade): which scene, and a swap's previous one;
+        // before a scene switches it off, "tv_off", then a pause for the fade.
+        tvPower = State.ON;
+        signals.clear();
+        r.signal("swap", "Music");
+        run(r, "Movie night: tv off; light Desk on");
+        assert signals.equals(Arrays.asList("swap Movie night from Music", "tv_off Movie night")) : signals;
+        assert log.equals(Arrays.asList("wait " + SceneRunner.FADE_MS + " ms", "tv sleep", "Desk true null null")) : log;
+        signals.clear();
+        r.signal("start", null);
+        run(r, "Lights only: light Desk on");
+        assert signals.isEmpty() : signals; // no TV in it: nothing to tell
+        r.signal(null, null);
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));

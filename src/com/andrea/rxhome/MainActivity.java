@@ -1099,7 +1099,8 @@ public class MainActivity extends Activity {
             cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))))
             .music(cfg.spotify())
             .tvs(cfg::tvNamed)
-            .smooth(turningOff || before != null);
+            .smooth(turningOff || before != null)
+            .signal(turningOff ? "off" : before != null ? "swap" : "start", before == null ? null : before.name);
         io.execute(() -> {
             int[] r = runner.run(todo);
             ui(() -> {
