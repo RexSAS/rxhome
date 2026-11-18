@@ -47,6 +47,7 @@ public class MainActivity extends Activity {
     private State genServer, genStick;
     private Boolean genHome; // any home device answered this refresh
     private long vpnTriedAt, scannedAt;
+    private boolean splashPending;
     private String vpnNote; // shown on the server card while WireGuard connects, or why it didn't
     private final Map<String, LightRow> rows = new LinkedHashMap<>();
 
@@ -55,6 +56,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         Ui.window(this);
         cfg = new Config(this);
+        splashPending = state == null; // a fresh start, not a rotation or a return
         if (checkSelfPermission(Vpn.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Vpn.PERMISSION}, 1); // lets rxhome switch on the WireGuard tunnel
         }
@@ -70,6 +72,13 @@ public class MainActivity extends Activity {
         startForegroundService(new Intent(this, TunnelWatch.class));
         // Rebuilt on every resume: settings may have changed lights or scenes.
         setContentView(build());
+        if (splashPending) {
+            splashPending = false;
+            // Over the whole window (content gets rebuilt while loading); skipped with animations off.
+            if (android.animation.ValueAnimator.areAnimatorsEnabled()) {
+                new SplashView(this).play((android.view.ViewGroup) getWindow().getDecorView());
+            }
+        }
         refresh();
     }
 
