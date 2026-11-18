@@ -65,10 +65,6 @@ class SceneRunner {
         return this;
     }
 
-    long now() {
-        return System.currentTimeMillis();
-    }
-
     void waitMs(int ms) {
         try {
             Thread.sleep(ms);
@@ -77,66 +73,36 @@ class SceneRunner {
         }
     }
 
-    /** Between a light's fade steps; its own round trip is most of the pace. */
-    void fadeGap() {
-        waitMs(30);
-    }
+    static final int LIGHT_FADE_MS = 1000; // a Tapo bulb's own off fade, roughly
 
-    /** A brightness along an eased fade (slow start, slow end): t from 0 to 1. */
-    static int fadeLevel(int from, int to, double t) {
-        t = Math.max(0, Math.min(1, t));
-        double s = t * t * (3 - 2 * t);
-        return (int) Math.round(from + (to - from) * s);
-    }
-
-    /** Fades these lights at the same time (a thread each) to on/off and brightness; true if every light took it. */
-    private boolean fade(Collection<Tapo> targets, boolean on, Integer brightness, Integer kelvin, int[] color) {
-        java.util.concurrent.atomic.AtomicBoolean all = new java.util.concurrent.atomic.AtomicBoolean(true);
-        java.util.List<Thread> threads = new java.util.ArrayList<>();
+    /**
+     * Smooth, with the bulbs' own fade (their stepped brightness over Wi-Fi looks jerky): off is one command;
+     * a light that's on goes off, a pause while it fades, then one "on" with its new brightness and colour.
+     */
+    private boolean switchSmooth(Collection<Tapo> targets, boolean on, Integer brightness, Integer kelvin, int[] color) {
+        boolean all = true, fading = false;
+        java.util.List<Tapo> next = new java.util.ArrayList<>();
         for (Tapo t : targets) {
-            Thread th = new Thread(() -> { if (!fadeOne(t, on, brightness, kelvin, color)) all.set(false); }, "light-fade");
-            threads.add(th);
-            th.start();
-        }
-        for (Thread th : threads) {
             try {
-                th.join();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
-        }
-        return all.get();
-    }
-
-    /** One light: from where it is, a new level as fast as it answers for FADE_MS, then off / white / colour. */
-    private boolean fadeOne(Tapo t, boolean on, Integer brightness, Integer kelvin, int[] color) {
-        try {
-            org.json.JSONObject i = t.info();
-            int from = i.optBoolean("device_on") ? i.optInt("brightness", 100) : on ? 1 : 0;
-            if (on && brightness == null) {
-                t.set(true, null, kelvin); // no level to fade to
-            } else if (from > 0) {
-                int to = on ? brightness : 1, last = -1;
-                long start = now();
-                while (true) {
-                    double f = Math.min(1, (now() - start) / (double) FADE_MS);
-                    int lv = Math.max(1, fadeLevel(from, to, f));
-                    boolean end = f >= 1;
-                    if (lv != last || end) {
-                        t.set(true, lv, end && on ? kelvin : null);
-                        last = lv;
-                    }
-                    if (end) break;
-                    fadeGap();
+                if (!on || t.info().optBoolean("device_on")) {
+                    t.set(false, null, null);
+                    fading = true;
                 }
+                next.add(t);
+            } catch (IOException | RuntimeException e) {
+                all = false;
             }
-            if (!on) t.set(false, null, null);
-            else if (color != null) t.color(color[0], color[1]);
-            return true;
-        } catch (IOException | RuntimeException e) {
-            return false;
         }
+        if (!on) return all;
+        if (fading) waitMs(LIGHT_FADE_MS);
+        for (Tapo t : next) {
+            try {
+                t.turnOn(brightness, kelvin, color);
+            } catch (IOException | RuntimeException e) {
+                all = false;
+            }
+        }
+        return all;
     }
 
     /** Returns {steps done, steps total}. */
@@ -195,7 +161,7 @@ class SceneRunner {
                 Integer brightness = s.length >= 4 ? Integer.valueOf(s[3]) : null;
                 int[] color = s.length == 5 ? Scenes.color(s[4]) : null;
                 Integer kelvin = s.length == 5 && color == null ? kelvin(s[4]) : null;
-                if (smooth) return fade(targets, on, brightness, kelvin, color);
+                if (smooth) return switchSmooth(targets, on, brightness, kelvin, color);
                 boolean all = true;
                 for (Tapo t : targets) {
                     try {

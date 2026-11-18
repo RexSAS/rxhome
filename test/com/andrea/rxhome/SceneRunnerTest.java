@@ -10,7 +10,6 @@ import java.util.Map;
 public class SceneRunnerTest {
 
     static final List<String> log = new ArrayList<>(), signals = new ArrayList<>();
-    static long clock;
     static State stick = State.ON, server = State.ON, tvPower = State.OFF;
     static String answer;
 
@@ -35,6 +34,12 @@ public class SceneRunnerTest {
         @Override
         org.json.JSONObject info() {
             return new org.json.JSONObject().put("device_on", level >= 0).put("brightness", Math.max(level, 0));
+        }
+
+        @Override
+        void turnOn(Integer brightness, Integer kelvin, int[] color) throws IOException {
+            if (broken) throw new IOException("unreachable");
+            log.add(name + " on " + brightness + " " + kelvin + (color == null ? "" : " color " + color[0] + " " + color[1]));
         }
 
         @Override
@@ -91,9 +96,7 @@ public class SceneRunnerTest {
         }, () -> log.add("phone remote")) {
             @Override void pause(int seconds) { log.add("wait " + seconds); }
             @Override void keyGap() { log.add("gap"); }
-            @Override void fadeGap() {}
             @Override void waitMs(int ms) { log.add("wait " + ms + " ms"); }
-            @Override long now() { return clock += 300; } // each look at the clock: 300 ms later
         };
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
 
@@ -194,22 +197,20 @@ public class SceneRunnerTest {
         assert log.get(0).equals("ask com.spotify.tv.android") && log.get(1).equals("camera wake") : log;
         tvPower = State.ON;
 
-        // Smooth (swaps, turning off): lights fade by time (1.5 s, eased), as fast as each light answers.
+        // Smooth (swaps, turning off): the bulbs' own fade. Off is one command; a light that's on goes off,
+        // a pause while it fades, then one "on" with its new brightness and colour (it fades in once).
         r.smooth(true);
         FakeLight desk = (FakeLight) lights.get("Desk");
         desk.level = 80;
         run(r, "X: light Desk off");
-        assert log.equals(Arrays.asList("Desk true 72 null", "Desk true 52 null", "Desk true 29 null", "Desk true 9 null",
-            "Desk true 1 null", "Desk false null null")) : log;
-        desk.level = -1;
+        assert log.equals(Arrays.asList("Desk false null null")) : log;
+        desk.level = -1; // off already: straight on
         run(r, "X: light Desk on 50 warm");
-        assert log.equals(Arrays.asList("Desk true 6 null", "Desk true 18 null", "Desk true 33 null", "Desk true 45 null",
-            "Desk true 50 2700")) : log;
-        desk.level = 20; // already on: from where it is
+        assert log.equals(Arrays.asList("Desk on 50 2700")) : log;
+        desk.level = 20;
         run(r, "X: light Desk on 30 color:210,80");
-        assert log.equals(Arrays.asList("Desk true 21 null", "Desk true 24 null", "Desk true 26 null", "Desk true 29 null",
-            "Desk true 30 null", "Desk color 210 80")) : log;
-        assert SceneRunner.fadeLevel(80, 1, 0) == 80 && SceneRunner.fadeLevel(80, 1, 1) == 1 && SceneRunner.fadeLevel(0, 100, 0.5) == 50;
+        assert log.equals(Arrays.asList("Desk false null null", "wait " + SceneRunner.LIGHT_FADE_MS + " ms", "Desk on 30 null color 210 80"))
+            : log;
         r.smooth(false);
         desk.level = -1;
 
