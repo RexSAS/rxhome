@@ -133,6 +133,41 @@ final class Discovery {
         return r.contains("\"name\"") && r.contains("featuring");
     }
 
+    /** A Philips' own name, from its /6/system reply; null if none. */
+    static String philipsName(String systemJson) {
+        try {
+            String n = new org.json.JSONObject(systemJson).optString("name", "").trim();
+            return n.isEmpty() ? null : n;
+        } catch (org.json.JSONException e) {
+            return null;
+        }
+    }
+
+    /** A stick's name: its device name, else its model; null if neither. */
+    static String stickName(String deviceName, String model) {
+        String n = deviceName == null ? "" : deviceName.trim();
+        if (n.isEmpty() || n.equals("null")) n = model == null ? "" : model.trim();
+        return n.isEmpty() ? null : n;
+    }
+
+    static String readPhilipsName(String host) {
+        String h = host.contains(":") ? host : host + ":1925";
+        return philipsName(fetch("http://" + h + "/6/system"));
+    }
+
+    /** Only from a stick that already trusts this phone: an unknown one isn't made to show its prompt. */
+    static String readStickName(String ip, KeyPair key) {
+        Adb a = new Adb(ip, 5555, key);
+        a.offerKey = false;
+        try {
+            return stickName(a.shell("settings get global device_name", 2000), a.shell("getprop ro.product.model", 2000));
+        } catch (IOException e) {
+            return null;
+        } finally {
+            a.close();
+        }
+    }
+
     /** For Settings → TVs: {sticks (ADB open), Philips TVs} on this Wi-Fi. */
     static List<List<String>> scanTvs(String myIp) {
         List<String> hosts = subnet(myIp);

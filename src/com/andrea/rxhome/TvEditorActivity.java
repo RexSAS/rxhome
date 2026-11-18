@@ -20,7 +20,7 @@ import java.util.concurrent.Executors;
 /** One TV: its name and what it groups (a stick for status/remote/apps, a Philips for power/volume). */
 public class TvEditorActivity extends Activity {
 
-    private static final String NONE = "None";
+    private static final String NONE = "None", FIRESTICK = "The FireStick (HDMI)";
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private Config cfg;
     private String id, stick, philips;
@@ -106,10 +106,12 @@ public class TvEditorActivity extends Activity {
         parts.removeAllViews();
         label(parts, "CONTROLS: STATUS, REMOTE, APPS");
         parts.addView(Ui.text(this, "A FireStick or Android TV (ADB debugging on).", 13, Ui.DIM, false));
-        chips(parts, foundSticks, stick, pick -> stick = pick);
+        chips(parts, foundSticks, stick, NONE, pick -> stick = pick);
         label(parts, "POWER & VOLUME");
-        parts.addView(Ui.text(this, "A Philips TV. Without one, the stick switches the TV over HDMI.", 13, Ui.DIM, false));
-        chips(parts, foundPhilips, philips, pick -> philips = pick);
+        parts.addView(Ui.text(this, stick.isEmpty() ? "A Philips TV: its own power, volume and mute."
+            : "The FireStick does it over HDMI (on/off, volume up/down, mute). A paired Philips adds exact volume levels.",
+            13, Ui.DIM, false));
+        chips(parts, foundPhilips, philips, stick.isEmpty() ? NONE : FIRESTICK, pick -> philips = pick);
         if (!philips.isEmpty()) {
             boolean paired = !cfg.get(Tvs.key(id, Config.PHILIPS_USER)).isEmpty();
             TextView pair = Ui.button(this, paired ? "PAIRED · PAIR AGAIN" : "PAIR WITH THIS PHILIPS (TV ON)", false);
@@ -124,19 +126,21 @@ public class TvEditorActivity extends Activity {
         void picked(String value);
     }
 
-    private void chips(LinearLayout box, List<String> found, String current, Pick pick) {
+    /** Chips by the devices' names (addresses until a scan reads them); the last one picks none ("" = noneLabel). */
+    private void chips(LinearLayout box, List<String> found, String current, String noneLabel, Pick pick) {
         List<String> choices = new ArrayList<>(found);
         if (!current.isEmpty() && !choices.contains(current)) choices.add(0, current);
-        choices.add(NONE);
+        choices.add("");
         LinearLayout row = new LinearLayout(this);
         for (String c : choices) {
-            boolean on = c.equals(NONE) ? current.isEmpty() : c.equals(current);
-            TextView chip = Ui.button(this, c, on);
+            boolean on = c.equals(current);
+            String label = c.isEmpty() ? noneLabel : cfg.deviceName(c);
+            TextView chip = Ui.button(this, label, on);
             chip.setTextSize(13);
-            chip.setContentDescription(c + (on ? ", selected" : ""));
+            chip.setContentDescription(label + (c.isEmpty() ? "" : ", " + c) + (on ? ", selected" : ""));
             chip.setOnClickListener(v -> {
                 Ui.haptic(v);
-                pick.picked(c.equals(NONE) ? "" : c);
+                pick.picked(c);
                 renderParts();
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
@@ -157,6 +161,10 @@ public class TvEditorActivity extends Activity {
         io.execute(() -> {
             String me = Discovery.wifiIp();
             List<List<String>> found = me == null ? null : Discovery.scanTvs(me);
+            if (found != null) { // their own names, for the chips and the TV list
+                for (String ip : found.get(0)) cfg.nameDevice(ip, Discovery.readStickName(ip, cfg.adbKey()));
+                for (String ip : found.get(1)) cfg.nameDevice(ip, Discovery.readPhilipsName(ip));
+            }
             runOnUiThread(() -> {
                 if (isFinishing()) return;
                 scan.setText("SCAN THE WI-FI AGAIN");

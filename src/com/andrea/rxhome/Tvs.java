@@ -77,16 +77,12 @@ final class Tvs {
         return n.isEmpty() ? "TV" : n;
     }
 
-    static String describe(Tv t, boolean paired) {
+    /** Settings' row line, with the devices' names (name: address → name, or the address if unknown). */
+    static String describe(Tv t, boolean paired, java.util.function.Function<String, String> name) {
         if (t.stick.isEmpty() && t.philips.isEmpty()) return "No devices yet";
-        StringBuilder s = new StringBuilder();
-        if (!t.stick.isEmpty()) s.append("FireStick ").append(t.stick);
-        if (!t.philips.isEmpty()) {
-            if (s.length() > 0) s.append(" · ");
-            s.append("Philips ").append(t.philips).append(paired ? " (paired)" : " (not paired)");
-        }
-        if (t.stick.isEmpty()) s.append(": power and volume only");
-        return s.toString();
+        if (t.philips.isEmpty()) return name.apply(t.stick) + " · power and volume through it";
+        String ph = name.apply(t.philips) + (paired ? " (paired)" : " (not paired)");
+        return t.stick.isEmpty() ? ph + ": power and volume only" : name.apply(t.stick) + " · " + ph;
     }
 
     static String[] names(List<Tv> tvs) {

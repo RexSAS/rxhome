@@ -7,6 +7,13 @@ import java.util.List;
 
 public class DiscoveryTest {
     public static void main(String[] a) throws Exception {
+        // Names for the TV list: what the devices call themselves; nothing usable = null (the address shows).
+        assert "55OLED770/12".equals(Discovery.philipsName("{\"name\":\"55OLED770/12\",\"featuring\":{}}"));
+        assert Discovery.philipsName("{}") == null && Discovery.philipsName("garbage") == null;
+        assert "Fire TV Stick di Andrea".equals(Discovery.stickName("Fire TV Stick di Andrea\n", "AFTKA"));
+        assert "AFTKA".equals(Discovery.stickName("null\n", "AFTKA\n"));          // no name set: the model
+        assert Discovery.stickName("", " ") == null;
+
         // The /24 around the phone's address, without the phone itself.
         List<String> hosts = Discovery.subnet("192.168.1.57");
         assert hosts.size() == 253 && hosts.get(0).equals("192.168.1.1") && hosts.get(252).equals("192.168.1.254");

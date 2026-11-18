@@ -300,7 +300,7 @@ public class SettingsActivity extends Activity {
     private void renderTvs() {
         tvsBox.removeAllViews();
         for (Tvs.Tv t : cfg.tvs()) {
-            row(tvsBox, t.name, Tvs.describe(t, cfg.philips(t.id) != null), false,
+            row(tvsBox, t.name, Tvs.describe(t, cfg.philips(t.id) != null, cfg::deviceName), false,
                 v -> startActivity(new android.content.Intent(this, TvEditorActivity.class).putExtra("tv", t.id)));
         }
         row(tvsBox, "+ Add a TV", "", true, v -> startActivity(new android.content.Intent(this, TvEditorActivity.class)));

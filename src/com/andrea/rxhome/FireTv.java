@@ -252,21 +252,27 @@ class FireTv {
     /** The TV's volume to a level (its own 0-60 scale), through the paired Philips. */
     void tvVolume(int level) throws IOException {
         Philips p = philips;
-        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
+        if (p == null) throw new IOException("A volume level needs the TV's own controls (a paired Philips): the FireStick only turns it up and down");
         p.setVolume(level);
     }
 
     void tvMute() throws IOException {
         Philips p = philips;
-        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
-        p.mute();
+        if (p == null) key(MUTE);
+        else p.mute();
     }
 
-    /** A key on the TV itself: "VolumeUp", "VolumeDown", "Mute". */
+    static final int VOLUME_UP = 24, VOLUME_DOWN = 25, MUTE = 164;
+
+    /** A key on the TV itself: "VolumeUp", "VolumeDown", "Mute"; without a Philips, the stick's volume keys (HDMI-CEC). */
     void tvKey(String key) throws IOException {
         Philips p = philips;
-        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
-        p.key(key);
+        if (p != null) {
+            p.key(key);
+            return;
+        }
+        if (!hasStick) throw new IOException("Pair this TV's Philips in Settings → TVs");
+        key(key.equals("VolumeUp") ? VOLUME_UP : key.equals("VolumeDown") ? VOLUME_DOWN : MUTE);
     }
 
     void launch(String pkg) throws IOException {

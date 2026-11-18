@@ -23,11 +23,14 @@ public class TvsTest {
         // Names can't break the format.
         assert Tvs.clean(" Big | room\n") .equals("Big room") && Tvs.clean("  ").equals("TV");
 
-        // Settings' row line.
-        assert Tvs.describe(tvs.get(0), true).equals("FireStick 192.168.1.49 · Philips 192.168.1.221 (paired)");
-        assert Tvs.describe(tvs.get(1), false).equals("Philips 192.168.1.80 (not paired): power and volume only");
-        assert Tvs.describe(tvs.get(2), false).equals("FireStick 192.168.1.90");
-        assert Tvs.describe(new Tvs.Tv("tv5", "New", "", ""), false).equals("No devices yet");
+        // Settings' row line: the devices' own names (their address until a scan has read the name).
+        java.util.function.Function<String, String> names = ip -> ip.equals("192.168.1.49") ? "Fire TV Stick di Andrea"
+            : ip.equals("192.168.1.221") ? "55OLED770/12" : ip;
+        assert Tvs.describe(tvs.get(0), true, names).equals("Fire TV Stick di Andrea · 55OLED770/12 (paired)")
+            : Tvs.describe(tvs.get(0), true, names);
+        assert Tvs.describe(tvs.get(1), false, names).equals("192.168.1.80 (not paired): power and volume only");
+        assert Tvs.describe(tvs.get(2), false, names).equals("192.168.1.90 · power and volume through it");
+        assert Tvs.describe(new Tvs.Tv("tv5", "New", "", ""), false, names).equals("No devices yet");
         assert Arrays.asList(Tvs.names(tvs)).equals(Arrays.asList("Salotto", "Camera", "Studio"));
     }
 }

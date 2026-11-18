@@ -64,6 +64,16 @@ final class Config {
         return t != null ? t : l.isEmpty() ? null : l.get(0);
     }
 
+    /** A TV device's own name, as last read by a scan; its address until then. */
+    String deviceName(String ip) {
+        String n = prefs.getString("devname_" + ip, "");
+        return n.isEmpty() ? ip : n;
+    }
+
+    void nameDevice(String ip, String name) {
+        if (name != null && !name.trim().isEmpty()) put("devname_" + ip, name.trim());
+    }
+
     /** The first TV. */
     FireTv tv() {
         return tv(null);

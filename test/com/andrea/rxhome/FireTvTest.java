@@ -86,23 +86,22 @@ public class FireTvTest {
         assert stickWithCec("").tvState(State.OFF) == State.OFF;
         calls.clear();
 
-        // Not paired: a set volume / mute says what to do too.
-        for (Io io : new Io[] {() -> stick().tvVolume(20), () -> stick().tvMute()}) {
-            try {
-                io.go();
-                throw new AssertionError("volume without a paired TV");
-            } catch (java.io.IOException e) {
-                assert e.getMessage().contains("Pair") : e.getMessage();
-            }
-        }
-        // Not paired: volume says what to do.
+        // No Philips: the stick does volume up / down / mute (over HDMI-CEC, like its own remote).
         FireTv bare = stick();
+        calls.clear();
+        bare.tvKey("VolumeUp");
+        bare.tvKey("VolumeDown");
+        bare.tvKey("Mute");
+        bare.tvMute();
+        assert calls.equals(java.util.Arrays.asList("stick 24", "stick 25", "stick 164", "stick 164")) : calls;
+        // A set level needs the TV's own API: the stick only steps.
         try {
-            bare.tvKey("VolumeUp");
-            throw new AssertionError("volume without a paired TV");
+            bare.tvVolume(20);
+            throw new AssertionError("a volume level without the TV's API");
         } catch (java.io.IOException e) {
-            assert e.getMessage().contains("Pair") : e.getMessage();
+            assert e.getMessage().contains("level") : e.getMessage();
         }
+        assert bare.fadeVolume() == -1;
 
         // Nothing listens on port 9: unreachable, and fast (the home screen never waits on a dead device).
         long t0 = System.currentTimeMillis();
