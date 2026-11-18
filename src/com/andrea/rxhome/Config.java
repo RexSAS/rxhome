@@ -207,7 +207,8 @@ final class Config {
 
     /** Null until a token and secret are set. */
     static final String SPOTIFY_ID = "spotify_client_id", SPOTIFY_REFRESH = "spotify_refresh",
-        SPOTIFY_SPEAKERS = "spotify_speakers"; // speaker names last seen, one per line, for the scene editor
+        SPOTIFY_SPEAKERS = "spotify_speakers", // speaker names last seen, one per line, for the scene editor
+        SPEAKER_NAMES = "speaker_names"; // your names for them: "Spotify name=Your name" lines (see Spotify.label)
     static final int SPOTIFY_PORT = 43821; // login reply: http://127.0.0.1:43821/callback, as registered with Spotify
     private static Spotify spotify;
     private static String spotifyKey;

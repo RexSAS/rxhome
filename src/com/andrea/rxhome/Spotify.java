@@ -268,6 +268,25 @@ class Spotify {
         }
     }
 
+    /** Your name for a speaker (names: "Spotify name=Your name" lines), else Spotify's. */
+    static String label(String names, String spotifyName) {
+        return Scenes.lights(names).getOrDefault(spotifyName, spotifyName);
+    }
+
+    /** names with this speaker renamed; an empty name goes back to Spotify's. */
+    static String rename(String names, String spotifyName, String name) {
+        java.util.Map<String, String> m = Scenes.lights(names); // same "Key=Value" lines as the lights
+        String clean = name.replaceAll("[=:\\r\\n]", " ").replaceAll("\\s+", " ").trim();
+        if (clean.isEmpty() || clean.equals(spotifyName)) m.remove(spotifyName);
+        else m.put(spotifyName, clean);
+        StringBuilder s = new StringBuilder();
+        for (java.util.Map.Entry<String, String> e : m.entrySet()) {
+            if (s.length() > 0) s.append('\n');
+            s.append(e.getKey()).append('=').append(e.getValue());
+        }
+        return s.toString();
+    }
+
     static Device find(List<Device> devices, String name) {
         for (Device d : devices) if (d.name.trim().equalsIgnoreCase(name.trim())) return d;
         return null;
