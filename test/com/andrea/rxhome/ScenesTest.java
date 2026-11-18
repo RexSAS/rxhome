@@ -153,6 +153,18 @@ public class ScenesTest {
         assert swap("A: light all on", "B: light Desk on", java.util.Collections.<String>emptyList())
             .equals("light all off; light Desk on");                                                         // lights unknown: all off
 
+        // What a scene controls (a change by hand there means it's no longer active).
+        Scenes.Scene uses = Scenes.parse("M: light Desk on 50; tv on @Camera; keys home; music Cucina").get(0);
+        assert Scenes.usesLight(uses, "Desk") && !Scenes.usesLight(uses, "Strip");
+        assert Scenes.usesLight(Scenes.parse("M: light all off").get(0), "Strip");
+        assert Scenes.usesTv(uses, "Camera", false) && Scenes.usesTv(uses, "Salotto", true) && !Scenes.usesTv(uses, "Studio", false);
+        assert !Scenes.usesTv(Scenes.parse("M: light Desk on").get(0), "Salotto", true);
+        assert Scenes.usesMusic(uses) && !Scenes.usesMusic(Scenes.parse("M: tv on").get(0));
+        // Lights it leaves on (found off later = no longer active).
+        assert Scenes.leavesOn(uses, "Desk") && !Scenes.leavesOn(uses, "Strip");
+        assert Scenes.leavesOn(Scenes.parse("M: light all on 30; light Strip off").get(0), "Desk");
+        assert !Scenes.leavesOn(Scenes.parse("M: light all on 30; light Strip off").get(0), "Strip");
+
         // Renaming a TV renames it in the scenes too; other steps and TVs stay as they are.
         String renamed = Scenes.renameTv("A: tv on @Camera; keys home @camera; tv on @Studio; light Desk on\nB: tv off @Camera\n",
             "Camera", "Bedroom TV");

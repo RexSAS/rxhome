@@ -261,6 +261,36 @@ final class Scenes {
         return s[s.length - 1].substring(1);
     }
 
+    /** Whether the scene sets this light (by its name or "all"). */
+    static boolean usesLight(Scene sc, String light) {
+        for (String[] s : sc.steps) if (s[0].equals("light") && (s[1].equals("all") || s[1].equals(light))) return true;
+        return false;
+    }
+
+    /** Whether the scene uses this TV (TV and remote-key steps; no "@Name" = the first TV). */
+    static boolean usesTv(Scene sc, String tvName, boolean first) {
+        for (String[] s : sc.steps) {
+            if (!s[0].equals("tv") && !s[0].equals("keys")) continue;
+            String t = tvTarget(s);
+            if (t == null ? first : t.equalsIgnoreCase(tvName)) return true;
+        }
+        return false;
+    }
+
+    static boolean usesMusic(Scene sc) {
+        for (String[] s : sc.steps) if (s[0].equals("music")) return true;
+        return false;
+    }
+
+    /** Whether the scene leaves this light on (its last word on it, by name or "all"). */
+    static boolean leavesOn(Scene sc, String light) {
+        boolean on = false;
+        for (String[] s : sc.steps) {
+            if (s[0].equals("light") && (s[1].equals("all") || s[1].equals(light))) on = s[2].equals("on");
+        }
+        return on;
+    }
+
     /** Scene text with a TV's new name in its steps; unreadable text is left as it is. */
     static String renameTv(String text, String oldName, String newName) {
         List<Scene> list;

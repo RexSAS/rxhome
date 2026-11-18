@@ -177,6 +177,8 @@ class SceneRunner {
                 if (s[1].equals("on") || s[1].equals("off")) {
                     // Like the server: check first. Sending "off" to a TV that's already off can turn it on.
                     boolean want = s[1].equals("on"), isOn = tv.tvState(tv.state()) == State.ON;
+                    System.err.println("rxhome-tvstate: scene wants " + s[1] + ", read as " + (isOn ? "on" : "off")
+                        + (want != isOn ? " -> sending " + s[1] : " -> nothing sent"));
                     if (want != isOn) {
                         if (want) tv.wake();
                         else {

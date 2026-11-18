@@ -469,6 +469,7 @@ public class MainActivity extends Activity {
         void power(View v) {
             Ui.haptic(v);
             Ui.burst(v);
+            byHand(sc -> Scenes.usesTv(sc, info.name, !tvCards.isEmpty() && tvCards.get(0) == this));
             FireTv tv = cfg.tv(info.id);
             if (!info.stick.isEmpty()) status.setText("…");
             io.execute(() -> {
@@ -597,6 +598,7 @@ public class MainActivity extends Activity {
 
         void send(boolean on, Integer brightness) {
             Ui.haptic(view);
+            byHand(sc -> Scenes.usesLight(sc, name));
             io.execute(() -> {
                 try {
                     tapo.set(on, brightness, null);
@@ -676,6 +678,7 @@ public class MainActivity extends Activity {
         }
 
         private void send(TapoCall call) {
+            byHand(sc -> Scenes.usesLight(sc, name));
             io.execute(() -> {
                 try {
                     call.run();
@@ -695,6 +698,7 @@ public class MainActivity extends Activity {
                 int b = i.optInt("brightness", on ? 100 : 0);
                 ui(() -> {
                     show(on, b, true);
+                    if (!on) byHand(sc -> Scenes.leavesOn(sc, name)); // switched off elsewhere: not the scene any more
                     bar.setEnabled(i.has("brightness"));
                     if (Tapo.hasColor(i)) {
                         dot.setBackground(circle(currentColor(i)));
@@ -807,6 +811,7 @@ public class MainActivity extends Activity {
     private void control(View v, MusicCall call) {
         Spotify sp = cfg.spotify();
         if (sp == null) return;
+        byHand(Scenes::usesMusic);
         Ui.haptic(v);
         io.execute(() -> {
             try {
@@ -952,6 +957,7 @@ public class MainActivity extends Activity {
     private void moveMusic(Target t) {
         Spotify sp = cfg.spotify();
         if (sp == null) return;
+        byHand(Scenes::usesMusic);
         speakersButton.setText("🔊 Moving…");
         String me = phoneName();
         io.execute(() -> {
@@ -989,6 +995,24 @@ public class MainActivity extends Activity {
         java.util.Set<String> s = new java.util.LinkedHashSet<>();
         for (String n : cfg.get(Config.SCENES_ACTIVE).split("\n")) if (!n.trim().isEmpty()) s.add(n.trim());
         return s;
+    }
+
+    /** The active scene, or null. */
+    private Scenes.Scene activeScene() {
+        java.util.Set<String> act = activeScenes();
+        if (act.isEmpty()) return null;
+        try {
+            for (Scenes.Scene sc : Scenes.parse(cfg.get(Config.SCENES))) if (act.contains(sc.name)) return sc;
+        } catch (ParseException e) {
+            // Unreadable scenes: none.
+        }
+        return null;
+    }
+
+    /** Something the active scene controls changed by hand: it's no longer what's on (nothing else is done). */
+    private void byHand(java.util.function.Predicate<Scenes.Scene> uses) {
+        Scenes.Scene a = activeScene();
+        if (a != null && uses.test(a)) saveActive(new java.util.LinkedHashSet<>());
     }
 
     private void saveActive(java.util.Set<String> s) {

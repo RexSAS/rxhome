@@ -185,7 +185,11 @@ class FireTv {
     State tvState(State stick) {
         if (stick == State.UNREACHABLE) return State.UNREACHABLE;
         try {
-            Boolean on = parseTvPower(cecLog());
+            String dump = cecLog();
+            Boolean on = parseTvPower(dump);
+            // shortcut: diagnosis of a TV read as off while on (2026-11-18); remove once the state is fixed.
+            String[] lines = dump.trim().split("\n");
+            System.err.println("rxhome-tvstate: stick=" + stick + " cec=" + on + " last=" + lines[lines.length - 1].trim());
             if (on != null) return on ? State.ON : State.OFF;
         } catch (IOException e) {
             log("power state", e);
