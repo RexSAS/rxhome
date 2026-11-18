@@ -75,6 +75,9 @@ public class RemoteActivity extends Activity {
         top.addView(source, srcLp);
         top.addView(power);
         col.addView(top);
+        if (tv.mode().equals("stick")) col.addView(typingBar(), barLp()); // typing goes through the FireStick
+        col.setFocusableInTouchMode(true); // the screen, not the bar, gets focus: no keyboard until the bar is tapped
+        col.requestFocus();
 
         // A TV with a FireStick and/or Sky box bound: which one the arrows, OK, back, home and touchpad
         // drive, and which buttons show. Volume and power always go to the TV, apps to the FireStick.
@@ -219,6 +222,63 @@ public class RemoteActivity extends Activity {
 
     private interface Key {
         void go() throws IOException;
+    }
+
+    private String sentText = "";
+    private android.widget.EditText bar;
+    private final Runnable flushTyping = this::flushTyping;
+
+    /** Typed here, shown on the TV as you go: whatever field is selected there (a search, a login). */
+    private View typingBar() {
+        bar = new android.widget.EditText(this);
+        bar.setHint("Type on the TV…");
+        bar.setHintTextColor(Ui.DIM);
+        bar.setTextColor(Ui.TEXT);
+        bar.setTypeface(Ui.font(this, false));
+        bar.setSingleLine(true);
+        bar.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEND);
+        bar.setContentDescription("Type on the TV");
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(Ui.TILE);
+        bg.setCornerRadius(Ui.dp(this, 10));
+        bar.setBackground(bg);
+        int p = Ui.dp(this, 14);
+        bar.setPadding(p, Ui.dp(this, 10), p, Ui.dp(this, 10));
+        bar.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence c, int a, int b, int d) {}
+            @Override public void onTextChanged(CharSequence c, int a, int b, int d) {}
+            @Override public void afterTextChanged(android.text.Editable e) {
+                bar.removeCallbacks(flushTyping);
+                bar.postDelayed(flushTyping, 300); // a burst at a time: each "type" takes ~1 s on the TV
+            }
+        });
+        bar.setOnEditorActionListener((v, action, event) -> {
+            bar.removeCallbacks(flushTyping);
+            flushTyping();
+            send(() -> tv.key(FireTv.ENTER));
+            sentText = ""; // a new search starts empty; the TV keeps what it got
+            bar.setText("");
+            bar.removeCallbacks(flushTyping);
+            return true;
+        });
+        return bar;
+    }
+
+    private LinearLayout.LayoutParams barLp() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = Ui.dp(this, 10);
+        return lp;
+    }
+
+    /** Sends what changed since last time: deletes back to where it differs, then types the rest. */
+    private void flushTyping() {
+        String now = bar.getText().toString();
+        String[] c = Typing.change(sentText, now);
+        sentText = now;
+        int deletes = Integer.parseInt(c[0]);
+        String typed = c[1];
+        if (deletes > 0) send(() -> { for (int i = 0; i < deletes; i++) tv.key(FireTv.DEL); });
+        if (!typed.isEmpty()) send(() -> tv.type(typed));
     }
 
     private void send(Key k) {

@@ -179,6 +179,29 @@ class FireTv {
         System.err.println("rxhome-tv: " + what + " failed: " + e);
     }
 
+    static final int DEL = 67, ENTER = 66;
+
+    /** Types into whatever field is selected on the TV (plain characters only: see textCommand). */
+    void type(String text) throws IOException {
+        String cmd = textCommand(text);
+        if (cmd != null) adb.shell(cmd, 5000);
+    }
+
+    /**
+     * The TV's "input text" for this text, or null if nothing's left to type: it only types plain ASCII, so
+     * accents are dropped (è → e) and the rest skipped; a space is its "%s"; quoted for the TV's shell.
+     */
+    static String textCommand(String text) {
+        String plain = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        StringBuilder s = new StringBuilder();
+        for (char c : plain.toCharArray()) {
+            if (c == ' ') s.append("%s");
+            else if (c > ' ' && c < 127) s.append(c);
+        }
+        if (s.length() == 0) return null;
+        return "input text '" + s.toString().replace("'", "'\\''") + "'";
+    }
+
     void launch(String pkg) throws IOException {
         safe(pkg); // scene text reaches here ("tv app <package>")
         adb.shell("monkey -p " + pkg + " -c android.intent.category.LAUNCHER 1", 5000);

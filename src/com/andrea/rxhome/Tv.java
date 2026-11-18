@@ -170,6 +170,12 @@ class Tv {
         }
     }
 
+    /** Types into the field selected on the FireStick (the remote shows its text bar in FireStick style only). */
+    void type(String text) throws IOException {
+        if (stick == null) throw new IOException("Typing needs a FireStick");
+        stick.type(text);
+    }
+
     void keyDown(int code) throws IOException {
         if (mode().equals("stick")) stick.keyDown(code);
         else key(code);
