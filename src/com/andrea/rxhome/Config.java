@@ -107,7 +107,11 @@ final class Config {
 
     synchronized Tv tv() {
         Tvs.Saved a = active();
+        // The remote's switch isn't part of the key: flipping it mustn't drop the stick's connections.
+        boolean toTv = a != null && a.inputToTv;
+        if (a != null) a.inputToTv = false;
         String key = a == null ? "" : Tvs.format(java.util.Collections.singletonList(a));
+        if (a != null) a.inputToTv = toTv;
         if (tv == null || !key.equals(tvKey)) {
             if (tv != null) tv.close();
             tv = a == null ? new Tv(null, null, false) : new Tv(screen(a), a.hasStick() ? stick(a.stickIp) : null, a.inputToTv);

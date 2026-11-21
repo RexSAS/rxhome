@@ -3,7 +3,7 @@
 A phone app with fast controls for the home setup, part of [rxenv](https://github.com/RexSAS/rxenv):
 
 - **rexserver**: online or not (LAN address first, then `rxfilms.rxsas.it`), CPU / temperature / RAM / uptime, and a power button that presses the server's SwitchBot Bot (works from anywhere, even with the server off).
-- **TV**: puts the FireStick to sleep or wakes it, a no-look remote (touchpad: swipe to move, tap for OK, hold for long press, draw ○ for HOME, ⊃ for BACK, C for play/pause; the other keys along the bottom edge; the phone's volume buttons drive the TV's; holding any key holds it on the TV), and an Apps screen: RxFilms (Continue watching / Next up, after a one-time Jellyfin Quick Connect sign-in in Settings), Spotify (Liked Songs / DJ X), YouTube in SmartTube (Claude FM); tap an app to open it, a shortcut to go straight there (the TV is switched on first if needed).
+- **TV**: Samsung, LG and Philips TVs and FireSticks, in any home: add each once, the app picks the one on the Wi-Fi you're on (tap the TV card's name to pick another). Power on/off, a no-look remote (touchpad: swipe to move, tap for OK, hold for long press, draw ○ for HOME, ⊃ for BACK, C for play/pause; the other keys along the bottom edge; the phone's volume buttons drive the TV's; holding any key holds it on the TV; with a TV *and* a FireStick, a *FireStick | TV* switch picks where the arrows and touchpad go, FireStick by default), and an Apps screen (a TV without a FireStick lists its own apps): RxFilms (Continue watching / Next up, after a one-time Jellyfin Quick Connect sign-in in Settings), Spotify (Liked Songs / DJ X), YouTube in SmartTube (Claude FM); tap an app to open it, a shortcut to go straight there (the TV is switched on first if needed).
 - **Tapo lights**: on/off and brightness, straight over Wi-Fi without the Tapo cloud.
 - **Scenes**: one tap for several things, e.g. *Movie night* = lights 20%, TV on, open RxFilms.
 
@@ -28,13 +28,17 @@ Remote keys go through a tiny helper (`tv/…/Keys.java`, built by `keys.sh` and
 
 Open ⚙ Settings:
 
-1. **Nothing to type for addresses.** The server (Jellyfin, port 8096), the FireStick (ADB, 5555) and the Philips (JointSPACE, 1925) are found by scanning the Wi-Fi, and found again if they move. The FireStick only counts if it already trusts rxhome's key (the scan never offers it, so no other device gets a prompt). Settings shows what was found.
+1. **Nothing to type for addresses.** The server (Jellyfin, port 8096) and every saved TV are found by scanning the Wi-Fi, and found again if they move. TVs are recognised by their own id (Samsung device id, UPnP uuid, or certificate), never by IP, so two homes using the same addresses don't mix. The scan never pairs anything, so no device gets a prompt by itself.
    **Away from home:** when neither the server nor the FireStick answers, rxhome switches on the WireGuard tunnel named `rxfilms` (WireGuard app → Settings → *Allow remote control apps* must be on; rxhome asks once for permission to control WireGuard). The public address `rxfilms.rxsas.it` is still tried too, but Cloudflare's allowlist blocks it before it reaches the server, so from mobile data it can't tell on from off.
    **Following the network:** while rxhome or Jellyfin is open (a notification shows), joining a Wi-Fi switches rxhome's tunnel off and checks whether home answers there (home Wi-Fi: stays off; any other: back on); losing Wi-Fi switches it on if home is out of reach. About 10 s after neither rxhome nor Jellyfin is in front (or the screen is off), rxhome's tunnel goes off and the watch ends. Needs *Usage access* for rxhome (Settings → Apps → Special app access). Tunnels you switch on yourself are left alone. With the server online and the Jellyfin app installed, the server card shows **Open Jellyfin**.
    For the CPU / temperature / RAM line, install node_exporter on rexserver once: `sudo apt install prometheus-node-exporter`.
 2. **SwitchBot**: in the SwitchBot app, Profile → Preferences → tap *App Version* 10 times → Developer Options shows the token and secret. Paste both, then *Pick the Bot* and choose the one on the server's button.
-3. **TV**: the first time, the TV shows "Allow USB debugging?" for *rxhome*: tick *Always allow* and accept.
-   **Philips TV** (volume, mute, power): with the TV on, tap *Pair with the TV* and type the PIN it shows. Power state comes from what the TV announces over HDMI-CEC (its API answers the same on and in standby); on = `PowerOn` key (plus Wake-on-LAN), off = `Standby` key.
+3. **TVs**: with the TV on and the phone on its Wi-Fi, Settings → *Add a TV*, pick it from the list, then on the TV:
+   - **Samsung** (Tizen, 2016+): choose *Allow*. Switching on from the phone needs the TV's network standby / Wake-on-LAN (on by default on most).
+   - **LG** (webOS): choose *Accept*. To switch it on from the phone, turn on *Turn on via Wi-Fi* (or *Mobile TV On*) in the TV's settings.
+   - **Philips** (JointSPACE): type the PIN it shows. This model can't report its power, so it's read from what the TV announces over HDMI-CEC to the FireStick.
+   - **FireStick**: turn on ADB debugging (Settings → My Fire TV → Developer options), then on the TV tick *Always allow* and accept "Allow USB debugging?". A FireStick added in a home with one saved TV joins it (and vice versa).
+   A Samsung can't set an exact volume (a scene's volume step is skipped there) and its mute toggles.
 4. **Tapo**: your Tapo account email and password. Lights and plugs are found on the Wi-Fi automatically (UDP broadcast, port 20002) and named as in the Tapo app; the list in Settings (`Name=IP`) can be renamed and follows lights whose IP changes. Put `#` before a name (`#Desk strip=…`) to hide that light from rxhome and its scenes; discovery won't add it back.
    Lights on 2025 firmware (TPAP login, e.g. the L900-5 strips) only accept rxhome's local login with **Third-Party Compatibility** on: Tapo app → Me → Third-Party Services → Third-Party Compatibility. Until then they show as "L900 .10" and stay grey; tap one to see why.
 5. **Scenes**: Settings lists your scenes; tap one to edit it, or *Add new scene*. The editor builds a scene by tapping: a name, then steps (lights: which, on/off, brightness, warm/cool white or any colour from the wheel; TV on/off; open RxFilms / Spotify / YouTube; Claude FM; the server's power button; wait), each movable and removable. Saved in the same text format as before.
@@ -42,7 +46,9 @@ Open ⚙ Settings:
 
 ## Known limits
 
-- Without pairing the Philips TV, power only sleeps/wakes the FireStick (Fire OS never sends CEC standby; the Alexa remote's infrared is closed to apps), and volume/mute do nothing.
+- A FireStick without its TV added only sleeps/wakes itself (Fire OS never sends CEC standby; the Alexa remote's infrared is closed to apps), and volume goes through its keys.
+- Other homes work only on their Wi-Fi (WireGuard reaches your own home only).
+- Android/Google TVs (Sony, TCL, Hisense, newer Philips) aren't supported yet.
 
 - The server status can't tell "off" from "can't reach it" away from home (Cloudflare only lets in allowed IPs), so it shows "unknown" there.
 - Tapo: KLAP (and the older passthrough login) only. TPAP, the SPAKE2+ login of 2025 firmware, isn't implemented; with Third-Party Compatibility on, those devices accept KLAP.
