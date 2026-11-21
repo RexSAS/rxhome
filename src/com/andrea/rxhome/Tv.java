@@ -154,7 +154,7 @@ class Tv {
 
     // --- always the TV ---
 
-    /** Volume up / down / mute keys (24, 25, 164): the TV's API, or the stick's keys (HDMI-CEC) without one. */
+    /** Keys for the TV itself, volume up / down / mute / source (24, 25, 164, 178): the TV's API, or the stick's keys (HDMI-CEC) without one. */
     void volumeKey(int code) throws IOException {
         if (screen != null) screen.key(code);
         else if (stick != null) stick.key(code);

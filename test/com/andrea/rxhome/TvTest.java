@@ -61,8 +61,9 @@ public class TvTest {
         expect("tv key 19", "tv key 20", "tv key 20");
         // Volume always to the TV, apps always to the stick, whatever the switch says.
         both.volumeKey(24);
+        both.volumeKey(178); // SOURCE: the TV's inputs
         both.launch("com.x");
-        expect("tv key 24", "stick launch com.x");
+        expect("tv key 24", "tv key 178", "stick launch com.x");
         both.setInputToTv(false);
         both.volumeKey(25);
         expect("tv key 25");

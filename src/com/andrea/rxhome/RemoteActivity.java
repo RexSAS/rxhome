@@ -44,6 +44,7 @@ public class RemoteActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
+        top.setPadding(0, 0, 0, Ui.dp(this, 8)); // room between SOURCE and the switch below
         top.addView(Ui.text(this, "Remote", 26, Ui.TEXT, true), new LinearLayout.LayoutParams(0, -2, 1));
         TextView power = Ui.power(this);
         power.setOnClickListener(v -> {
@@ -57,6 +58,10 @@ public class RemoteActivity extends Activity {
                 }
             });
         });
+        TextView source = small(tvButton("SOURCE", 178)); // the TV's inputs, whatever the switch says
+        LinearLayout.LayoutParams srcLp = new LinearLayout.LayoutParams(-2, -2);
+        srcLp.rightMargin = Ui.dp(this, 12);
+        top.addView(source, srcLp);
         top.addView(power);
         col.addView(top);
 
