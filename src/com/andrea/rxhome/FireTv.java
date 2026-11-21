@@ -166,7 +166,7 @@ class FireTv {
         }
         if (philipsMac != null) {
             try {
-                Philips.wake(philipsMac);
+                Screen.wakeOnLan(philipsMac);
             } catch (IOException | IllegalArgumentException e) {
                 // No broadcast here (away from home).
             }

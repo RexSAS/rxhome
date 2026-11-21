@@ -83,11 +83,11 @@ public class PhilipsTest {
         assert old.contains("response=\"dbf4191d1d2b07b4ad55795a65365fcd\"") && !old.contains("qop") : old;
 
         // Wake-on-LAN: 6 × 0xFF, then the MAC 16 times (any separator, any case).
-        byte[] wol = Philips.magicPacket("aa:BB-cc:dd:ee:FF");
+        byte[] wol = Screen.magicPacket("aa:BB-cc:dd:ee:FF");
         assert wol.length == 102 && wol[0] == (byte) 0xff && wol[5] == (byte) 0xff;
         assert wol[6] == (byte) 0xaa && wol[11] == (byte) 0xff && wol[96] == (byte) 0xaa && wol[101] == (byte) 0xff;
         try {
-            Philips.magicPacket("nonsense");
+            Screen.magicPacket("nonsense");
             throw new AssertionError("bad MAC accepted");
         } catch (IllegalArgumentException expected) {
             // ok
