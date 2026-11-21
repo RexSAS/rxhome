@@ -9,8 +9,6 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -19,9 +17,6 @@ import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 import org.json.JSONObject;
 
 /**
@@ -247,10 +242,10 @@ class Philips {
         c.setRequestProperty("Content-Type", "application/json");
         if (pin != null) {
             javax.net.ssl.SSLSocketFactory f = FACTORIES.get(pin);
-            if (f == null) FACTORIES.put(pin, f = pinned(pin, null));
+            if (f == null) FACTORIES.put(pin, f = Pin.factory(pin, null));
             c.setSSLSocketFactory(f);
         } else {
-            c.setSSLSocketFactory(pinned(null, seenPin)); // pairing: record the certificate
+            c.setSSLSocketFactory(Pin.factory(null, seenPin)); // pairing: record the certificate
         }
         c.setHostnameVerifier(ANY_NAME);
         return c;
@@ -264,35 +259,6 @@ class Philips {
             }
         }
         return c.getResponseCode();
-    }
-
-    /** Accepts only the certificate with this SHA-256 (or, while pairing, records whichever is shown). */
-    private static javax.net.ssl.SSLSocketFactory pinned(String pin, String[] seenPin) throws IOException {
-        TrustManager tm = new X509TrustManager() {
-            @Override public void checkClientTrusted(X509Certificate[] chain, String auth) throws CertificateException {
-                throw new CertificateException("not a server");
-            }
-            @Override public void checkServerTrusted(X509Certificate[] chain, String auth) throws CertificateException {
-                String got;
-                try {
-                    got = hex(MessageDigest.getInstance("SHA-256").digest(chain[0].getEncoded()));
-                } catch (java.security.NoSuchAlgorithmException e) {
-                    throw new CertificateException(e);
-                }
-                if (pin == null && seenPin != null) seenPin[0] = got;
-                else if (!got.equals(pin)) throw new CertificateException("Not the paired TV");
-            }
-            @Override public X509Certificate[] getAcceptedIssuers() {
-                return new X509Certificate[0];
-            }
-        };
-        try {
-            SSLContext ctx = SSLContext.getInstance("TLS");
-            ctx.init(null, new TrustManager[] {tm}, null);
-            return ctx.getSocketFactory();
-        } catch (java.security.GeneralSecurityException e) {
-            throw new IOException(e);
-        }
     }
 
     static Map<String, String> challenge(String header) {
