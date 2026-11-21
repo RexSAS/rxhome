@@ -121,6 +121,16 @@ public class SceneRunnerTest {
         // RxFilms' Continue watching needs Jellyfin: not signed in = not done.
         assert Arrays.equals(run(r, "X: tv app org.rxfilms.tv resume"), new int[] {0, 1}) : log;
 
+        // A TV without a FireStick can't play Claude FM: that step isn't done, the rest still runs.
+        SceneRunner noStick = new SceneRunner(lights, new FakeTv() {
+            @Override void claudeFm() { throw new UnsupportedOperationException("Needs a FireStick on this TV"); }
+        }, new FakeBot(), "bot1", () -> server, null, pkg -> answer, () -> log.add("phone remote")) {
+            @Override void pause(int seconds) { log.add("wait " + seconds); }
+            @Override void keyGap() { log.add("gap"); }
+        };
+        assert Arrays.equals(run(noStick, "X: tv app org.smarttube.stable claudefm; tv off"), new int[] {1, 2}) : log;
+        assert log.equals(Arrays.asList("tv sleep")) : log;
+
         // The remote on the phone opens, the scene goes on.
         assert Arrays.equals(run(r, "X: phone remote; tv off"), new int[] {2, 2}) && log.equals(Arrays.asList("phone remote", "tv sleep")) : log;
 

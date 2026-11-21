@@ -60,6 +60,24 @@ public class RemoteActivity extends Activity {
         top.addView(power);
         col.addView(top);
 
+        // TV + FireStick: where the arrows, OK, back, home and touchpad go. Volume and power always go to
+        // the TV, apps always to the FireStick.
+        if (tv.showSwitch()) {
+            boolean onTv = tv.inputToTv();
+            TextView toStick = Ui.button(this, "FIRESTICK", !onTv), toTv = Ui.button(this, "TV", onTv);
+            toStick.setContentDescription("Remote controls the FireStick" + (onTv ? "" : ", selected"));
+            toTv.setContentDescription("Remote controls the TV" + (onTv ? ", selected" : ""));
+            View.OnClickListener pick = v -> {
+                Ui.haptic(v);
+                tv.setInputToTv(v == toTv);
+                new Config(this).setInputToTv(v == toTv);
+                recreate(); // redraw with the new choice highlighted
+            };
+            toStick.setOnClickListener(pick);
+            toTv.setOnClickListener(pick);
+            col.addView(row(small(toStick), small(toTv)));
+        }
+
         // The no-look part: a touchpad filling the screen (swipes, taps and shapes, see Gestures).
         TouchpadView pad = new TouchpadView(this, new Gestures.Out() {
             @Override public void press(int code) { send(() -> tv.key(code)); }
@@ -76,6 +94,10 @@ public class RemoteActivity extends Activity {
         // (BACK too, as a backup if a gesture is misread).
         TextView apps = small(Ui.button(this, "APPS", false));
         apps.setOnClickListener(v -> startActivity(new android.content.Intent(this, TvAppsActivity.class)));
+        if (!tv.can("apps")) { // e.g. a Philips without a FireStick: greyed, not silently doing nothing
+            apps.setEnabled(false);
+            apps.setAlpha(0.4f);
+        }
         col.addView(row(small(key("BACK", 4)), small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
             small(tvButton("MUTE", 164)), apps));
 

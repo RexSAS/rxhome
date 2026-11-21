@@ -53,6 +53,14 @@ public class TvAppsActivity extends Activity {
         sub.setPadding(0, 0, 0, Ui.dp(this, 16));
         col.addView(sub);
 
+        if (!tv.can("films")) { // a TV without a FireStick: its own apps (RxFilms, Spotify links, Claude FM need the stick)
+            tvApps(col);
+            ScrollView s = new ScrollView(this);
+            s.addView(col);
+            setContentView(s);
+            return;
+        }
+
         LinearLayout films = row(col, R.drawable.ic_app_rxfilms, "RxFilms", "org.rxfilms.tv");
         loadFilms(films);
 
@@ -79,6 +87,39 @@ public class TvAppsActivity extends Activity {
         ScrollView s = new ScrollView(this);
         s.addView(col);
         setContentView(s);
+    }
+
+    /** The TV's installed apps, one button each. */
+    private void tvApps(LinearLayout col) {
+        TextView wait = Ui.text(this, "Asking the TV…", 13, Ui.DIM, false);
+        col.addView(wait);
+        io.execute(() -> {
+            java.util.List<String[]> apps;
+            String err = null;
+            try {
+                apps = tv.apps();
+            } catch (IOException | RuntimeException e) {
+                apps = java.util.Collections.emptyList();
+                err = e.getMessage();
+            }
+            java.util.List<String[]> list = apps;
+            String why = err;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                col.removeView(wait);
+                if (list.isEmpty()) col.addView(Ui.text(this, why != null ? why : "No apps listed by the TV", 13, Ui.DIM, false));
+                for (String[] app : list) {
+                    TextView b = Ui.button(this, app[1], false);
+                    b.setOnClickListener(v -> {
+                        Ui.haptic(v);
+                        run(() -> { tv.launch(app[0]); return "Opening " + app[1] + " on the TV"; });
+                    });
+                    LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+                    lp.bottomMargin = Ui.dp(this, 8);
+                    col.addView(b, lp);
+                }
+            });
+        });
     }
 
     @Override
