@@ -65,6 +65,11 @@ public class SettingsActivity extends Activity {
         LinearLayout.LayoutParams addLp = new LinearLayout.LayoutParams(-1, -2);
         addLp.topMargin = Ui.dp(this, 8);
         col.addView(add, addLp);
+        TextView order = Ui.button(this, "RENAME / REORDER", false);
+        order.setOnClickListener(v -> startActivity(new android.content.Intent(this, TvsActivity.class)));
+        LinearLayout.LayoutParams orderLp = new LinearLayout.LayoutParams(-1, -2);
+        orderLp.topMargin = Ui.dp(this, 8);
+        col.addView(order, orderLp);
 
         section(col, "Jellyfin (RxFilms shortcuts)");
         col.addView(Ui.text(this, "For Continue watching / Next up in Apps: sign in once with Quick Connect.", 13, Ui.DIM, false));
@@ -437,6 +442,7 @@ public class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         renderScenes(); // back from the scene editor: show what changed
+        showTvs(); // ...or from renaming / reordering the TVs
     }
 
     /** A row per scene (tap to edit), then "Add new scene". */

@@ -24,8 +24,8 @@ final class Config {
 
     // One Tv per process, shared by the home and remote screens, so its ADB connections and the running
     // key helper survive moving between screens. Rebuilt when the active TV or its settings change.
-    private static Tv tv;
-    private static String tvKey;
+    private static final java.util.Map<String, Tv> TVS_BY_UID = new java.util.HashMap<>();
+    private static final java.util.Map<String, String> KEYS_BY_UID = new java.util.HashMap<>();
 
     static final String TVS = "tvs", TV_ACTIVE = "tv_active", TVS_MIGRATED = "tvs_migrated";
 
@@ -105,21 +105,32 @@ final class Config {
         return here;
     }
 
+    /** The TV in use (Remote, Apps, scenes). */
     synchronized Tv tv() {
         Tvs.Saved a = active();
+        return a == null ? new Tv(null, null, false) : tv(a);
+    }
+
+    /**
+     * One Tv per saved TV, shared by every screen, so its connections (and the FireStick's key helper)
+     * survive moving between screens. Rebuilt when that TV's settings change.
+     */
+    synchronized Tv tv(Tvs.Saved a) {
         // The remote's switch isn't part of the key: flipping it mustn't drop the stick's connections.
-        boolean toTv = a != null && a.inputToTv;
-        if (a != null) a.inputToTv = false;
-        String key = a == null ? "" : Tvs.format(java.util.Collections.singletonList(a));
-        if (a != null) a.inputToTv = toTv;
-        if (tv == null || !key.equals(tvKey)) {
-            if (tv != null) tv.close();
-            FireTv stick = a == null || !a.hasStick() ? null : stick(a.stickIp);
+        boolean toTv = a.inputToTv;
+        a.inputToTv = false;
+        String key = Tvs.format(java.util.Collections.singletonList(a));
+        a.inputToTv = toTv;
+        Tv t = TVS_BY_UID.get(a.uid);
+        if (t == null || !key.equals(KEYS_BY_UID.get(a.uid))) {
+            if (t != null) t.close();
+            FireTv stick = a.hasStick() ? stick(a.stickIp) : null;
             if (stick != null && !a.stickId.equals(a.stickIp)) stick.serial = a.stickId; // ip = no serial was readable
-            tv = a == null ? new Tv(null, null, false) : new Tv(screen(a), stick, a.inputToTv);
-            tvKey = key;
+            t = new Tv(screen(a), stick, a.inputToTv);
+            TVS_BY_UID.put(a.uid, t);
+            KEYS_BY_UID.put(a.uid, key);
         }
-        return tv;
+        return t;
     }
 
     private static Screen screen(Tvs.Saved s) {

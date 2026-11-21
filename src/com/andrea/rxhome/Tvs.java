@@ -174,6 +174,13 @@ final class Tvs {
         return false;
     }
 
+    /** Moves the TV at i one place (delta -1 up, +1 down); nothing past either end. */
+    static void move(List<Saved> list, int i, int delta) {
+        int j = i + delta;
+        if (i < 0 || i >= list.size() || j < 0 || j >= list.size()) return;
+        list.add(j, list.remove(i));
+    }
+
     /** The settings before multi-TV: the FireStick, plus the Philips if it was paired. */
     static Saved migrate(String fireIp, String philipsIp, String user, String pass, String cert, String mac) {
         Saved s = new Saved();

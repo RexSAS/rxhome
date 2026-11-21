@@ -121,5 +121,13 @@ public class TvsTest {
         // A FireStick already saved: just its IP updated.
         Tvs.add(list, Tvs.stick("1.1.1.30", "FS"), Arrays.<Discovery.TvFound>asList());
         assert list.size() == 1 && list.get(0).stickIp.equals("1.1.1.30");
+
+        // Reordering: one step up or down; past either end nothing moves.
+        List<Tvs.Saved> order = new ArrayList<>(Arrays.asList(saved("lg", "a", ""), saved("lg", "b", ""), saved("lg", "c", "")));
+        Tvs.move(order, 2, -1);
+        assert order.get(1).id.equals("c") && order.get(2).id.equals("b");
+        Tvs.move(order, 0, -1);
+        Tvs.move(order, 2, 1);
+        assert order.get(0).id.equals("a") && order.get(1).id.equals("c") && order.get(2).id.equals("b");
     }
 }
