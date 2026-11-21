@@ -31,7 +31,7 @@ public class TvAppsActivity extends Activity {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final ExecutorService pictures = Executors.newFixedThreadPool(4);
     private Config cfg;
-    private FireTv tv;
+    private Tv tv;
 
     private interface TvAction {
         String run() throws IOException; // what to tell the user, e.g. "Opening Dune on the TV"

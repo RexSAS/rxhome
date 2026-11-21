@@ -26,7 +26,7 @@ import java.util.concurrent.Future;
 final class Discovery {
 
     static final class Found {
-        String server, stick, tv;
+        String server;
     }
 
     /** A TV (or FireStick) on this Wi-Fi. brand: samsung | lg | philips | firetv. id null = can't tell yet. */
@@ -158,39 +158,14 @@ final class Discovery {
         }
     }
 
-    /** One scan for all three. A FireStick nobody trusts yet counts only if it's the only ADB device. */
+    /** The Jellyfin server on this Wi-Fi (TVs: findTvs). */
     static Found find(String myIp, KeyPair key) {
-        List<String> hosts = subnet(myIp);
         Found f = new Found();
-        ExecutorService pool = Executors.newFixedThreadPool(3);
-        try {
-            Future<List<String>> jelly = pool.submit(() -> open(hosts, 8096, CONNECT_MS));
-            Future<List<String>> adb = pool.submit(() -> open(hosts, 5555, CONNECT_MS));
-            Future<List<String>> philips = pool.submit(() -> open(hosts, 1925, CONNECT_MS));
-            for (String h : jelly.get()) {
-                if (isJellyfin("http://" + h + ":8096")) {
-                    f.server = "http://" + h + ":8096";
-                    break;
-                }
+        for (String h : open(subnet(myIp), 8096, CONNECT_MS)) {
+            if (isJellyfin("http://" + h + ":8096")) {
+                f.server = "http://" + h + ":8096";
+                break;
             }
-            List<String> adbHosts = adb.get();
-            for (String h : adbHosts) {
-                if (isOurFireStick(h, key)) {
-                    f.stick = h;
-                    break;
-                }
-            }
-            if (f.stick == null && adbHosts.size() == 1) f.stick = adbHosts.get(0);
-            for (String h : philips.get()) {
-                if (isPhilips(h)) {
-                    f.tv = h;
-                    break;
-                }
-            }
-        } catch (Exception e) {
-            // Whatever was found so far.
-        } finally {
-            pool.shutdownNow();
         }
         return f;
     }

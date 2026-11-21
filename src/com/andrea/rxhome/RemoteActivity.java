@@ -29,7 +29,7 @@ public class RemoteActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicInteger queued = new AtomicInteger();
     private Runnable repeater;
-    private FireTv tv;
+    private Tv tv;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -77,18 +77,18 @@ public class RemoteActivity extends Activity {
         TextView apps = small(Ui.button(this, "APPS", false));
         apps.setOnClickListener(v -> startActivity(new android.content.Intent(this, TvAppsActivity.class)));
         col.addView(row(small(key("BACK", 4)), small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
-            small(tvButton("MUTE", "Mute")), apps));
+            small(tvButton("MUTE", 164)), apps));
 
         setContentView(col);
     }
 
-    /** A key for the TV itself (through the paired Philips API, not the FireStick). */
-    private TextView tvButton(String label, String key) {
+    /** A key for the TV itself (volume / mute: its own API when paired), whatever the switch says. */
+    private TextView tvButton(String label, int key) {
         TextView b = Ui.button(this, label, false);
         b.setContentDescription(label);
         b.setOnClickListener(v -> {
             Ui.haptic(v);
-            send(() -> tv.tvKey(key));
+            send(() -> tv.volumeKey(key));
         });
         return b;
     }
@@ -103,8 +103,8 @@ public class RemoteActivity extends Activity {
     @Override
     public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
         if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
-            String k = keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP ? "VolumeUp" : "VolumeDown";
-            if (queued.get() < 2) send(() -> tv.tvKey(k));
+            int k = keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP ? 24 : 25;
+            if (queued.get() < 2) send(() -> tv.volumeKey(k));
             return true;
         }
         return super.onKeyDown(keyCode, event);

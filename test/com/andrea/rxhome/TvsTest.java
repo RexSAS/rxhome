@@ -36,6 +36,9 @@ public class TvsTest {
         assert back.get(0).auth.equals("tok") && back.get(0).pin.equals("ab12") && back.get(0).mac.equals("aa:bb:cc:dd:ee:ff");
         assert back.get(1).pass.equals("pass") && back.get(1).stickId.equals("G070") && back.get(1).inputToTv;
         assert !back.get(0).inputToTv;
+        // Each saved TV has its own lasting local key, kept across saves.
+        assert !back.get(0).uid.isEmpty() && !back.get(0).uid.equals(back.get(1).uid);
+        assert Tvs.parse(Tvs.format(back)).get(1).uid.equals(back.get(1).uid);
         assert Tvs.parse("").isEmpty() && Tvs.parse("nonsense").isEmpty();
 
         // matchByIdNotIp: another home's TV at the same IP is not ours.
@@ -60,8 +63,17 @@ public class TvsTest {
         assert old.auth.equals("u") && old.pass.equals("p") && old.pin.equals("c") && old.mac.equals("m");
         m = Tvs.match(Arrays.asList(old), Arrays.asList(found("philips", "1.1.1.221", "uuid:P"), found("firetv", "1.1.1.49", "SER")));
         assert m.size() == 1 && old.id.equals("uuid:P") && old.stickId.equals("SER");
-        Tvs.Saved other = Tvs.migrate("1.1.1.49", "1.1.1.221", "u", "p", "c", "m");
-        assert Tvs.match(Arrays.asList(other), Arrays.asList(found("philips", "1.1.1.99", "uuid:P"))).isEmpty();
+        // Moved before the first scan (seen live: the stick went from .49 to .15): the only one of its
+        // kind here is ours, as the old single-device scan assumed.
+        Tvs.Saved moved = Tvs.migrate("1.1.1.49", "1.1.1.221", "u", "p", "c", "m");
+        m = Tvs.match(Arrays.asList(moved), Arrays.asList(found("philips", "1.1.1.99", "uuid:P"), found("firetv", "1.1.1.15", "SER")));
+        assert m.size() == 1 && moved.id.equals("uuid:P") && moved.ip.equals("1.1.1.99");
+        assert moved.stickId.equals("SER") && moved.stickIp.equals("1.1.1.15");
+        // Two of a kind, neither at the old IP: can't tell which, adopt nothing.
+        Tvs.Saved unsure = Tvs.migrate("1.1.1.49", "1.1.1.221", "u", "p", "c", "m");
+        assert Tvs.match(Arrays.asList(unsure), Arrays.asList(found("philips", "1.1.1.98", "uuid:P"),
+            found("philips", "1.1.1.99", "uuid:Q"))).isEmpty();
+        assert unsure.id.isEmpty();
 
         // Never paired with the Philips: the old setup is just the FireStick.
         Tvs.Saved stickOnly = Tvs.migrate("1.1.1.49", "1.1.1.221", "", "", "", "");
