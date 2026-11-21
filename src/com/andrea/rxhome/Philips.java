@@ -108,27 +108,6 @@ class Philips {
         }
     }
 
-    /** Switches the TV on from standby (needs "Switch on with Wi-Fi" on the TV). */
-    static void wake(String mac) throws IOException {
-        byte[] p = magicPacket(mac);
-        try (java.net.DatagramSocket s = new java.net.DatagramSocket()) {
-            s.setBroadcast(true);
-            java.net.InetAddress all = java.net.InetAddress.getByName("255.255.255.255");
-            for (int port : new int[] {9, 7}) s.send(new java.net.DatagramPacket(p, p.length, all, port));
-        }
-    }
-
-    static byte[] magicPacket(String mac) {
-        String hex = mac.replaceAll("[^0-9A-Fa-f]", "");
-        if (hex.length() != 12) throw new IllegalArgumentException("Not a MAC address: " + mac);
-        byte[] m = new byte[6];
-        for (int i = 0; i < 6; i++) m[i] = (byte) Integer.parseInt(hex.substring(2 * i, 2 * i + 2), 16);
-        byte[] p = new byte[102];
-        for (int i = 0; i < 6; i++) p[i] = (byte) 0xff;
-        for (int i = 0; i < 16; i++) System.arraycopy(m, 0, p, 6 + 6 * i, 6);
-        return p;
-    }
-
     /** True if the TV answers and wants a PIN pairing (read-only, no login). */
     static boolean needsPairing(String ip) {
         try {
