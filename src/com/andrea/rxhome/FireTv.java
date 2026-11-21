@@ -127,67 +127,23 @@ class FireTv {
         }
     }
 
-    // The TV itself (Fire OS never sends it CEC Standby and its remote's IR is closed to apps): the
-    // Philips' own network API, when paired. Its MAC wakes it from standby, when it went off the network.
-    private volatile Philips philips;
-    private volatile String philipsMac;
-
-    void setPhilips(Philips p, String mac) {
-        philips = p;
-        philipsMac = mac == null || mac.isEmpty() ? null : mac;
-    }
-
-    /** TV to standby (if paired and reachable), then the stick to sleep. */
+    /** The stick to sleep. Fire OS never sends the TV CEC Standby: the TV's own API does that (see Tv). */
     void sleep() throws IOException {
-        Philips p = philips;
-        if (p != null) {
-            try {
-                p.key("Standby");
-            } catch (IOException e) {
-                // Already off, or not on this network: the stick still goes to sleep.
-                log("standby", e);
-            }
-        }
         key(SLEEP);
     }
 
-    /**
-     * TV on: the PowerOn key through its API (it keeps the network up in standby), Wake-on-LAN for deep
-     * standby (needs "Switch on with Wi-Fi"), then the stick.
-     */
     void wake() throws IOException {
-        Philips p = philips;
-        if (p != null) {
-            try {
-                p.key("PowerOn");
-            } catch (IOException e) {
-                log("power on", e);
-            }
-        }
-        if (philipsMac != null) {
-            try {
-                Screen.wakeOnLan(philipsMac);
-            } catch (IOException | IllegalArgumentException e) {
-                // No broadcast here (away from home).
-            }
-        }
         key(WAKEUP);
     }
 
-    /**
-     * The TV's power (stick = the FireStick's state, already known by the caller), from what the TV
-     * announced over HDMI-CEC: its network API answers the same on and in standby. No CEC news yet: the
-     * stick's state stands in. Stick unreachable: away from home, unknown.
-     */
-    State tvState(State stick) {
-        if (stick == State.UNREACHABLE) return State.UNREACHABLE;
+    /** What the TV last announced over HDMI-CEC about its power; null if nothing yet or no answer. */
+    Boolean cecTvOn() {
         try {
-            Boolean on = parseTvPower(cecLog());
-            if (on != null) return on ? State.ON : State.OFF;
+            return parseTvPower(cecLog());
         } catch (IOException e) {
             log("power state", e);
+            return null;
         }
-        return stick;
     }
 
     /** The stick's HDMI-CEC log lines that carry the TV's power. */
@@ -212,32 +168,6 @@ class FireTv {
     /** TV errors that don't stop the action go to the system log (Android: tag System.err). No secrets. */
     private static void log(String what, Exception e) {
         System.err.println("rxhome-tv: " + what + " failed: " + e);
-    }
-
-    /** The power button: by the TV's state, not the stick's. */
-    void togglePower(State stick) throws IOException {
-        if (tvState(stick) == State.ON) sleep();
-        else wake();
-    }
-
-    /** The TV's volume to a level (its own 0-60 scale), through the paired Philips. */
-    void tvVolume(int level) throws IOException {
-        Philips p = philips;
-        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
-        p.setVolume(level);
-    }
-
-    void tvMute() throws IOException {
-        Philips p = philips;
-        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
-        p.mute();
-    }
-
-    /** A key on the TV itself: "VolumeUp", "VolumeDown", "Mute". */
-    void tvKey(String key) throws IOException {
-        Philips p = philips;
-        if (p == null) throw new IOException("Pair the TV in Settings to control its volume");
-        p.key(key);
     }
 
     void launch(String pkg) throws IOException {
