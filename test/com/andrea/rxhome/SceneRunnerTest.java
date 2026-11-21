@@ -36,8 +36,8 @@ public class SceneRunnerTest {
         }
     }
 
-    static class FakeTv extends FireTv {
-        FakeTv() { super(null); }
+    static class FakeTv extends Tv {
+        FakeTv() { super(null, null, false); }
         @Override State state() { return stick; }
         @Override State tvState(State s) { return tvPower; }
         @Override void wake() { log.add("tv wake"); }
@@ -46,7 +46,7 @@ public class SceneRunnerTest {
         @Override void view(String uri, String pkg) { log.add("tv view " + uri); }
         @Override void claudeFm() { log.add("tv play"); }
         @Override void openItem(String component, String id) { log.add("tv item " + id); }
-        @Override synchronized void key(int code) { log.add("key " + code); }
+        @Override void key(int code) { log.add("key " + code); }
         @Override void tvVolume(int level) { log.add("tv volume " + level); }
         @Override void tvMute() { log.add("tv mute"); }
     }

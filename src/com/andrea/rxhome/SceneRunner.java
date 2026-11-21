@@ -9,7 +9,7 @@ import java.util.Map;
 class SceneRunner {
 
     private final Map<String, Tapo> lights;
-    private final FireTv tv;
+    private final Tv tv;
     private final SwitchBot sb;
     private final String botId;
     private final java.util.function.Supplier<State> server;
@@ -22,7 +22,7 @@ class SceneRunner {
         String choose(String pkg);
     }
 
-    SceneRunner(Map<String, Tapo> lights, FireTv tv, SwitchBot sb, String botId,
+    SceneRunner(Map<String, Tapo> lights, Tv tv, SwitchBot sb, String botId,
             java.util.function.Supplier<State> server, Jellyfin jf, Ask ask, Runnable openRemote) {
         this.lights = lights;
         this.tv = tv;

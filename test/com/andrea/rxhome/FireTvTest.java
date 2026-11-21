@@ -21,15 +21,6 @@ public class FireTvTest {
         };
     }
 
-    static Philips philips(boolean broken) {
-        return new Philips("x", "u", "p", "c") {
-            @Override void key(String k) throws java.io.IOException {
-                if (broken) throw new java.io.IOException("TV asleep");
-                calls.add("tv " + k);
-            }
-        };
-    }
-
     /** A stick whose HDMI-CEC log reads `dump`. */
     static FireTv stickWithCec(String dump) {
         return new FireTv(null) {
@@ -39,22 +30,6 @@ public class FireTvTest {
     }
 
     public static void main(String[] a) throws Exception {
-        // With the Philips paired, TV off/on switch the TV itself, then the stick.
-        FireTv t = stick();
-        t.setPhilips(philips(false), null);
-        t.sleep();
-        assert calls.equals(java.util.Arrays.asList("tv Standby", "stick 223")) : calls;
-        calls.clear();
-        t.wake();
-        assert calls.equals(java.util.Arrays.asList("tv PowerOn", "stick 224")) : calls;
-        calls.clear();
-        t.tvKey("VolumeUp");
-        assert calls.equals(java.util.Arrays.asList("tv VolumeUp")) : calls;
-        // TV unreachable (e.g. already in standby): the stick still sleeps.
-        calls.clear();
-        t.setPhilips(philips(true), null);
-        t.sleep();
-        assert calls.equals(java.util.Arrays.asList("stick 223")) : calls;
         // The TV's power, from what it announces over HDMI-CEC (lines as the stick logs them, 2026-11-17).
         // Its network API can't tell: it answers the same on and in standby.
         String standby = "    [R] time=2026-11-17 21:42:28 message=<Standby> 0F:36\n";
@@ -69,40 +44,9 @@ public class FireTvTest {
         assert FireTv.parseTvPower("    [S] time=2026-11-17 21:43:24 message=<Report Power Status> 40:90:00\n") == null;
         assert FireTv.parseTvPower("") == null;
 
-        // Power button by the TV's state: on → Standby key; off → PowerOn key; the stick follows.
-        for (String dump : new String[] {reportOn, standby}) {
-            calls.clear();
-            FireTv p = stickWithCec(dump);
-            p.setPhilips(philips(false), null);
-            assert p.tvState(State.ON) == (dump == reportOn ? State.ON : State.OFF);
-            p.togglePower(State.ON);
-            assert calls.equals(dump == reportOn
-                ? java.util.Arrays.asList("tv Standby", "stick 223")
-                : java.util.Arrays.asList("tv PowerOn", "stick 224")) : calls;
-        }
-        // Away from home (stick unreachable): unknown, not "off".
-        assert stickWithCec(standby).tvState(State.UNREACHABLE) == State.UNREACHABLE;
-        // No CEC news yet: the stick's own state stands in.
-        assert stickWithCec("").tvState(State.OFF) == State.OFF;
-        calls.clear();
-
-        // Not paired: a set volume / mute says what to do too.
-        for (Io io : new Io[] {() -> stick().tvVolume(20), () -> stick().tvMute()}) {
-            try {
-                io.go();
-                throw new AssertionError("volume without a paired TV");
-            } catch (java.io.IOException e) {
-                assert e.getMessage().contains("Pair") : e.getMessage();
-            }
-        }
-        // Not paired: volume says what to do.
-        FireTv bare = stick();
-        try {
-            bare.tvKey("VolumeUp");
-            throw new AssertionError("volume without a paired TV");
-        } catch (java.io.IOException e) {
-            assert e.getMessage().contains("Pair") : e.getMessage();
-        }
+        // The stick reads it from its CEC log (routing by it: TvTest).
+        assert stickWithCec(standby).cecTvOn() == Boolean.FALSE;
+        assert stickWithCec("").cecTvOn() == null;
 
         // Nothing listens on port 9: unreachable, and fast (the home screen never waits on a dead device).
         long t0 = System.currentTimeMillis();
