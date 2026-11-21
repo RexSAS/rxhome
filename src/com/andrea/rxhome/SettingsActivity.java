@@ -223,6 +223,10 @@ public class SettingsActivity extends Activity {
     }
 
     private void pair(Discovery.TvFound f, java.util.List<Discovery.TvFound> scan) {
+        if (f.id == null && !f.brand.equals("firetv")) { // it couldn't be told apart from other TVs later
+            toast("Couldn't identify this TV: is it fully on? Try again in a minute");
+            return;
+        }
         switch (f.brand) {
             case "samsung":
                 toast("Look at the TV and choose Allow");

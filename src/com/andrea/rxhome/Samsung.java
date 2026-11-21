@@ -37,10 +37,16 @@ class Samsung implements Screen {
     }
 
     private static final int PAIR_WAIT_MS = 30000, TIMEOUT_MS = 4000;
-    private final String ip, token, pin, mac;
+    private final String ip, token, pin, mac, id;
     private Ws ws;
 
     Samsung(String ip, String token, String pin, String mac) {
+        this(ip, token, pin, mac, "");
+    }
+
+    /** id: the saved device id, so another home's Samsung at the same IP isn't taken for this one. */
+    Samsung(String ip, String token, String pin, String mac, String id) {
+        this.id = id == null ? "" : id;
         this.ip = ip;
         this.token = token;
         this.pin = pin;
@@ -103,7 +109,14 @@ class Samsung implements Screen {
 
     @Override
     public Boolean isOn() {
-        return parsePower(fetch("http://" + host(ip) + ":8001/api/v2/"));
+        return power(fetch("http://" + host(ip) + ":8001/api/v2/"), id);
+    }
+
+    /** Its power, if the info page is this TV's (id empty = don't check). */
+    static Boolean power(String json, String id) {
+        String[] info = parseInfo(json);
+        if (!id.isEmpty() && (info == null || !info[0].equals(id))) return null;
+        return parsePower(json);
     }
 
     @Override

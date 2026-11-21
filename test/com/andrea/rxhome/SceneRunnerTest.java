@@ -131,6 +131,16 @@ public class SceneRunnerTest {
         assert Arrays.equals(run(noStick, "X: tv app org.smarttube.stable claudefm; tv off"), new int[] {1, 2}) : log;
         assert log.equals(Arrays.asList("tv sleep")) : log;
 
+        // A TV alone that can't tell its power: "tv off" / "tv on" are sent as asked (both are explicit there).
+        SceneRunner blind = new SceneRunner(lights, new FakeTv() {
+            @Override boolean hasScreen() { return true; }
+            @Override State tvState(State s) { return State.UNREACHABLE; }
+        }, new FakeBot(), "bot1", () -> server, null, pkg -> answer, () -> log.add("phone remote")) {
+            @Override void pause(int seconds) { log.add("wait " + seconds); }
+        };
+        assert Arrays.equals(run(blind, "X: tv off"), new int[] {1, 1}) && log.equals(Arrays.asList("tv sleep")) : log;
+        assert Arrays.equals(run(blind, "X: tv on"), new int[] {1, 1}) && log.equals(Arrays.asList("tv wake")) : log;
+
         // The remote on the phone opens, the scene goes on.
         assert Arrays.equals(run(r, "X: phone remote; tv off"), new int[] {2, 2}) && log.equals(Arrays.asList("phone remote", "tv sleep")) : log;
 

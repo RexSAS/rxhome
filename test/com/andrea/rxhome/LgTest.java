@@ -56,6 +56,15 @@ public class LgTest {
             + "{\"id\":\"netflix\",\"title\":\"Netflix\"},{\"id\":\"youtube.leanback.v4\",\"title\":\"YouTube\"}]}}");
         assert apps.size() == 2 && apps.get(0)[0].equals("netflix") && apps.get(1)[1].equals("YouTube");
 
+        // A dropped connection is retried; only the TV's refusal isn't.
+        assert Lg.retry(new java.io.IOException("The TV closed the connection"));
+        assert Lg.retry(new java.io.IOException("The TV didn't answer in time"));
+        assert !Lg.retry(new Lg.Refused("The TV refused: 401"));
+        // An LG that's off (nothing answers): told quickly, so Wake-on-LAN isn't held up.
+        long t0 = System.currentTimeMillis();
+        assert new Lg("192.0.2.1", "CK", "00", null).isOn() == null;
+        assert System.currentTimeMillis() - t0 < 2500 : System.currentTimeMillis() - t0;
+
         Object[] tls = WsTest.tls();
         javax.net.ssl.SSLContext ctx = (javax.net.ssl.SSLContext) tls[0];
         String pin = (String) tls[1];

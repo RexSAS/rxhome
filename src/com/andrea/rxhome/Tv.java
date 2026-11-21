@@ -89,13 +89,19 @@ class Tv {
         return on == null ? s : on ? State.ON : State.OFF;
     }
 
+    private volatile boolean lastWasWake;
+
+    /** A TV alone that can't tell its power (Philips) alternates, starting with on, so off is always reachable. */
     void togglePower(State s) throws IOException {
-        if (tvState(s) == State.ON) sleep();
+        State t = tvState(s);
+        boolean off = t == State.ON || t == State.UNREACHABLE && screen != null && stick == null && lastWasWake;
+        if (off) sleep();
         else wake();
     }
 
     /** TV on (its API, then Wake-on-LAN), then the stick. A TV that doesn't answer doesn't stop the stick. */
     void wake() throws IOException {
+        lastWasWake = true;
         if (screen != null) {
             try {
                 screen.powerOn();
@@ -108,6 +114,7 @@ class Tv {
     }
 
     void sleep() throws IOException {
+        lastWasWake = false;
         if (screen != null) {
             try {
                 screen.powerOff();

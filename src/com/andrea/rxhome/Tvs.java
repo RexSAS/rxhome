@@ -40,6 +40,7 @@ final class Tvs {
                 set(s, v);
                 s.inputToTv = o.optBoolean("inputToTv", false);
                 if (!o.optString("uid").isEmpty()) s.uid = o.optString("uid");
+                if (s.id.isEmpty() && !s.pin.isEmpty() && (s.brand.equals("philips") || s.brand.equals("lg"))) s.id = "pin:" + s.pin;
                 out.add(s);
             }
         } catch (JSONException e) {
@@ -67,13 +68,12 @@ final class Tvs {
 
     /**
      * The saved TVs on this Wi-Fi now: the TV or its FireStick found by id (IPs updated in place). An entry
-     * from the old settings has no ids yet: it adopts what answers at its old IP, else the only one of its kind here.
+     * from the old settings has no FireStick id yet: it adopts the stick at its old IP, else the only one here.
      */
     static List<Saved> match(List<Saved> saved, List<Discovery.TvFound> found) {
         List<Saved> out = new ArrayList<>();
         for (Saved s : saved) {
             if (s.hasStick() && s.stickId.isEmpty()) s.stickId = adopt(found, "firetv", s.stickIp);
-            if (!s.brand.equals("none") && s.id.isEmpty()) s.id = adopt(found, s.brand, s.ip);
             boolean here = false;
             for (Discovery.TvFound f : found) {
                 if (f.id == null) continue;
@@ -185,6 +185,7 @@ final class Tvs {
             s.auth = user;
             s.pass = pass;
             s.pin = cert;
+            s.id = cert == null || cert.isEmpty() ? "" : "pin:" + cert; // what Discovery reports for it
             s.mac = mac == null ? "" : mac;
         } else {
             s.name = "FireStick";
