@@ -71,8 +71,11 @@ class SceneRunner {
                 if (tv == null) return false;
                 if (s[1].equals("on") || s[1].equals("off")) {
                     // Like the server: check first. Sending "off" to a TV that's already off can turn it on.
-                    boolean want = s[1].equals("on"), isOn = tv.tvState(tv.state()) == State.ON;
-                    if (want != isOn) {
+                    State now = tv.tvState(tv.state());
+                    boolean want = s[1].equals("on"), isOn = now == State.ON;
+                    // A TV alone that can't tell (Philips): its on and off are discrete, so just send it.
+                    boolean blind = now == State.UNREACHABLE && tv.hasScreen() && !tv.hasStick();
+                    if (want != isOn || blind) {
                         if (want) tv.wake();
                         else tv.sleep();
                     }

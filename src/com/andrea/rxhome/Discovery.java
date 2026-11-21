@@ -171,8 +171,8 @@ final class Discovery {
     }
 
     /**
-     * Every TV and FireStick on this Wi-Fi, each with a lasting id: Samsung's own device id, else the UPnP
-     * uuid, else its certificate's pin; a FireStick's serial (only if it already trusts our key: the scan
+     * Every TV and FireStick on this Wi-Fi, each with a lasting id: Samsung's own device id, LG's and
+     * Philips' certificate pin; a FireStick's serial (only if it already trusts our key: the scan
      * never offers it, so nothing gets a prompt).
      */
     static List<TvFound> findTvs(String myIp, KeyPair key) {
@@ -180,12 +180,10 @@ final class Discovery {
         List<TvFound> out = new java.util.ArrayList<>();
         ExecutorService pool = Executors.newFixedThreadPool(5);
         try {
-            Future<List<Ssdp.Hit>> ssdp = pool.submit(() -> Ssdp.search(2500));
             Future<List<String>> samsung = pool.submit(() -> open(hosts, 8001, CONNECT_MS));
             Future<List<String>> lg = pool.submit(() -> open(hosts, 3001, CONNECT_MS));
             Future<List<String>> philips = pool.submit(() -> open(hosts, 1925, CONNECT_MS));
             Future<List<String>> adb = pool.submit(() -> open(hosts, 5555, CONNECT_MS));
-            List<Ssdp.Hit> hits = ssdp.get();
             java.util.Set<String> taken = new java.util.HashSet<>();
             for (String h : samsung.get()) {
                 String[] info = Samsung.info(h);
@@ -194,7 +192,7 @@ final class Discovery {
             for (String h : lg.get()) {
                 if (taken.contains(h)) continue;
                 taken.add(h);
-                out.add(new TvFound("lg", h, identity(hits, h, 3001), "LG TV", null));
+                out.add(new TvFound("lg", h, identity(h, 3001), "LG TV", null));
             }
             for (String h : philips.get()) {
                 if (taken.contains(h) || !isPhilips(h)) continue;
@@ -205,7 +203,7 @@ final class Discovery {
                 } catch (org.json.JSONException e) {
                     // keep the default
                 }
-                out.add(new TvFound("philips", h, identity(hits, h, 1926), name, null));
+                out.add(new TvFound("philips", h, identity(h, 1926), name, null));
             }
             for (String h : adb.get()) {
                 Adb a = new Adb(h, 5555, key);
@@ -227,10 +225,8 @@ final class Discovery {
         return out;
     }
 
-    /** UPnP uuid, else the pin of the certificate on tlsPort; null if neither. */
-    private static String identity(List<Ssdp.Hit> hits, String ip, int tlsPort) {
-        String u = Ssdp.rootUuid(hits, ip);
-        if (u != null) return u;
+    /** The pin of the TV's certificate on tlsPort (the one it's paired with): the same every scan. */
+    private static String identity(String ip, int tlsPort) {
         try {
             return "pin:" + Pin.capture(ip, tlsPort);
         } catch (IOException e) {

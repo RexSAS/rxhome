@@ -16,6 +16,17 @@ import org.json.JSONObject;
  */
 class Lg implements Screen {
 
+    /** The TV said no (not a dropped connection): not worth retrying. */
+    static final class Refused extends IOException {
+        Refused(String m) {
+            super(m);
+        }
+    }
+
+    static boolean retry(IOException e) {
+        return !(e instanceof Refused);
+    }
+
     static final class Pairing {
         final String clientKey, pin;
 
@@ -125,6 +136,7 @@ class Lg implements Screen {
 
     @Override
     public Boolean isOn() {
+        if (!Discovery.anyAnswers(java.util.Collections.singletonList(host(ip) + ":" + port(ip)), 1200)) return null; // off or away: fast
         try {
             JSONObject p = call("ssap://com.webos.service.tvpower/power/getPowerState", null);
             return p.optString("state").equals("Active");
@@ -181,7 +193,7 @@ class Lg implements Screen {
             } catch (IOException e) {
                 if (ws != null) ws.close();
                 ws = null;
-                if (attempt == 1 || e.getMessage() != null && e.getMessage().startsWith("The TV")) throw e;
+                if (attempt == 1 || !retry(e)) throw e;
             }
         }
     }
@@ -193,7 +205,7 @@ class Lg implements Screen {
             try {
                 JSONObject o = new JSONObject(m);
                 if (!id.equals(o.optString("id"))) continue;
-                if (o.optString("type").equals("error")) throw new IOException("The TV refused: " + o.optString("error"));
+                if (o.optString("type").equals("error")) throw new Refused("The TV refused: " + o.optString("error"));
                 JSONObject p = o.optJSONObject("payload");
                 return p == null ? new JSONObject() : p;
             } catch (JSONException e) {
@@ -218,7 +230,7 @@ class Lg implements Screen {
                 JSONObject o = new JSONObject(m);
                 String type = o.optString("type");
                 if (type.equals("error")) {
-                    throw new IOException(key == null ? "The TV said no. Tap Add again and choose Accept"
+                    throw new Refused(key == null ? "The TV said no. Tap Add again and choose Accept"
                         : "The TV doesn't know rxhome any more: add it again in Settings");
                 }
                 if (type.equals("registered")) return o.getJSONObject("payload").getString("client-key");

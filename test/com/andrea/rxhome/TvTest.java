@@ -106,6 +106,14 @@ public class TvTest {
         }
         assert refused;
 
+        // A TV alone that can't tell its power (Philips): the button alternates, starting with on, so it
+        // can always be switched off too.
+        Tv blind = new Tv(screen(false, null), null, false);
+        blind.togglePower(blind.state());
+        blind.togglePower(blind.state());
+        blind.togglePower(blind.state());
+        expect("tv on", "tv off", "tv on");
+
         // FireStick alone: no switch, no TV volume level, volume keys to the stick.
         Tv stickOnly = new Tv(null, stick(""), false);
         assert !stickOnly.showSwitch() && stickOnly.can("films") && !stickOnly.can("volume");

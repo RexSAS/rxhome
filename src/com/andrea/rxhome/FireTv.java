@@ -60,7 +60,16 @@ class FireTv {
 
     /** Like state(), but says why: Adb.AdbAuthException means the TV hasn't accepted our key yet. */
     State checkedState() throws IOException {
-        return parseAwake(adb.shell("dumpsys power | grep mWakefulness=", 1500));
+        return parseState(adb.shell("getprop ro.serialno; dumpsys power | grep mWakefulness=", 1500), serial);
+    }
+
+    /** The saved serial ("" = not known yet): another home's FireStick at the same IP isn't used. */
+    volatile String serial = "";
+
+    static State parseState(String dump, String serial) throws IOException {
+        String first = dump.trim().split("\\s+", 2)[0];
+        if (!serial.isEmpty() && !first.equals(serial)) throw new IOException("Another FireStick answers here, not this TV's");
+        return parseAwake(dump);
     }
 
     /** One d-pad key: through the helper when it runs (one round trip), else `input` (~1 s on Fire OS). */

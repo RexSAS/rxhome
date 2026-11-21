@@ -58,6 +58,16 @@ public class FireTvTest {
         assert System.currentTimeMillis() - t0 < 2500 : System.currentTimeMillis() - t0;
 
 
+        // Another home's FireStick at the saved IP: not ours, so not used.
+        try {
+            FireTv.parseState("OTHER\n  mWakefulness=Awake\n", "SER");
+            throw new AssertionError("a stranger's FireStick was accepted");
+        } catch (java.io.IOException e) {
+            assert e.getMessage().contains("FireStick") : e.getMessage();
+        }
+        assert FireTv.parseState("SER\n  mWakefulness=Awake\n", "SER") == State.ON;
+        assert FireTv.parseState("ANY\n  mWakefulness=Asleep\n", "") == State.OFF; // no serial saved yet
+
         assert FireTv.parseAwake("  mWakefulness=Awake\n") == State.ON;
         assert FireTv.parseAwake("  mWakefulness=Asleep\n") == State.OFF;
         assert FireTv.parseAwake("  mWakefulness=Dozing\n") == State.OFF;

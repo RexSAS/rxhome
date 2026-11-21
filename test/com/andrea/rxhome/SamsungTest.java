@@ -31,6 +31,9 @@ public class SamsungTest {
         assert Samsung.parsePower("{\"device\":{\"PowerState\":\"on\"}}") == Boolean.TRUE;
         assert Samsung.parsePower("{\"device\":{}}") == Boolean.TRUE; // older models: answering = on
         assert Samsung.parsePower("") == null;
+        // Another Samsung at the saved IP (another home): its power isn't ours.
+        assert Samsung.power("{\"device\":{\"id\":\"uuid:B\",\"PowerState\":\"on\"}}", "uuid:A") == null;
+        assert Samsung.power("{\"device\":{\"id\":\"uuid:A\",\"PowerState\":\"on\"}}", "uuid:A") == Boolean.TRUE;
 
         String[] info = Samsung.parseInfo("{\"device\":{\"id\":\"uuid:abc\",\"name\":\"[TV] Samsung Q60\",\"wifiMac\":\"aa:bb:cc:dd:ee:ff\"}}");
         assert info[0].equals("uuid:abc") && info[1].equals("[TV] Samsung Q60") && info[2].equals("aa:bb:cc:dd:ee:ff");

@@ -114,7 +114,9 @@ final class Config {
         if (a != null) a.inputToTv = toTv;
         if (tv == null || !key.equals(tvKey)) {
             if (tv != null) tv.close();
-            tv = a == null ? new Tv(null, null, false) : new Tv(screen(a), a.hasStick() ? stick(a.stickIp) : null, a.inputToTv);
+            FireTv stick = a == null || !a.hasStick() ? null : stick(a.stickIp);
+            if (stick != null && !a.stickId.equals(a.stickIp)) stick.serial = a.stickId; // ip = no serial was readable
+            tv = a == null ? new Tv(null, null, false) : new Tv(screen(a), stick, a.inputToTv);
             tvKey = key;
         }
         return tv;
@@ -122,7 +124,7 @@ final class Config {
 
     private static Screen screen(Tvs.Saved s) {
         switch (s.brand) {
-            case "samsung": return new Samsung(s.ip, s.auth, s.pin, s.mac);
+            case "samsung": return new Samsung(s.ip, s.auth, s.pin, s.mac, s.id);
             case "lg": return new Lg(s.ip, s.auth, s.pin, s.mac);
             case "philips": return new Philips(s.ip, s.auth, s.pass, s.pin, s.mac);
             default: return null;
