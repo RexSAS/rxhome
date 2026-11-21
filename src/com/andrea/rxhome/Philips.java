@@ -24,7 +24,7 @@ import org.json.JSONObject;
  * as the open-source pylips does it. Volume, mute, standby: things the FireStick can't do.
  * The TV's certificate is self-signed, so it's pinned at pairing (SHA-256) and only that one is accepted after.
  */
-class Philips {
+class Philips implements Screen {
 
     // pylips' shared pairing key (JointSPACE "secret_key").
     private static final String SECRET =
@@ -42,13 +42,72 @@ class Philips {
         }
     }
 
-    private final String ip, user, pass, certPin;
+    private static final java.util.Map<Integer, String> KEYS = new java.util.HashMap<>();
+    static {
+        int[] codes = {19, 20, 21, 22, 23, 3, 4, 82, 85, 89, 90, 24, 25, 164, 178};
+        String[] names = {"CursorUp", "CursorDown", "CursorLeft", "CursorRight", "Confirm", "Home", "Back", "Options",
+            "PlayPause", "Rewind", "FastForward", "VolumeUp", "VolumeDown", "Mute", "Source"};
+        for (int i = 0; i < codes.length; i++) KEYS.put(codes[i], names[i]);
+    }
+
+    private final String ip, user, pass, certPin, wolMac;
 
     Philips(String ip, String user, String pass, String certPin) {
+        this(ip, user, pass, certPin, null);
+    }
+
+    Philips(String ip, String user, String pass, String certPin, String mac) {
         this.ip = ip;
         this.user = user;
         this.pass = pass;
         this.certPin = certPin;
+        this.wolMac = mac == null || mac.isEmpty() ? null : mac;
+    }
+
+    @Override
+    public void key(int keycode) throws IOException {
+        String k = KEYS.get(keycode);
+        if (k == null) throw new UnsupportedOperationException("No such key on this Philips: " + keycode);
+        key(k);
+    }
+
+    @Override
+    public void powerOff() throws IOException {
+        key("Standby");
+    }
+
+    /** The PowerOn key (it keeps the network up in standby), then Wake-on-LAN for deep standby. */
+    @Override
+    public void powerOn() throws IOException {
+        IOException failed = null;
+        try {
+            key("PowerOn");
+        } catch (IOException e) {
+            failed = e;
+        }
+        if (wolMac != null) Screen.wakeOnLan(wolMac);
+        else if (failed != null) throw failed;
+    }
+
+    /** This model can't tell (see below): the FireStick's HDMI-CEC reading is used instead. */
+    @Override
+    public Boolean isOn() {
+        return null;
+    }
+
+    @Override
+    public java.util.List<String[]> apps() {
+        throw new UnsupportedOperationException("This Philips can't list its apps");
+    }
+
+    @Override
+    public void launch(String appId) {
+        throw new UnsupportedOperationException("This Philips can't open apps");
+    }
+
+    @Override
+    public boolean can(String what) {
+        return !what.equals("apps");
     }
 
     /** E.g. "VolumeUp", "VolumeDown", "Mute", "Standby". */
@@ -60,12 +119,14 @@ class Philips {
     // endpoint answers the same on and in standby. The TV's power is read from HDMI-CEC (FireTv).
 
     /** Sets the TV's volume (its own scale, 0-60 here) and unmutes. */
-    void setVolume(int level) throws IOException {
+    @Override
+    public void setVolume(int level) throws IOException {
         request("POST", "/6/audio/volume", volumeBody(level, false), ip, user, pass, certPin, null);
     }
 
     /** Mutes, keeping the level for when it's unmuted. */
-    void mute() throws IOException {
+    @Override
+    public void mute() throws IOException {
         int now = currentVolume(get("audio/volume"));
         request("POST", "/6/audio/volume", volumeBody(now, true), ip, user, pass, certPin, null);
     }

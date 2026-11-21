@@ -68,6 +68,25 @@ public class PhilipsTest {
     }
     // Reference values from python3 hmac/hashlib, following pylips (JointSPACE v6 pairing) and RFC 2617 digest.
     public static void main(String[] a) throws Exception {
+        // As a Screen: Android keycodes map to JointSPACE key names.
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        Philips screen = new Philips("x", "u", "p", "c", null) {
+            @Override void key(String k) { keys.add(k); }
+        };
+        screen.key(19);
+        screen.key(23);
+        screen.key(178);
+        screen.powerOff();
+        assert keys.equals(java.util.Arrays.asList("CursorUp", "Confirm", "Source", "Standby")) : keys;
+        boolean unsupported = false;
+        try {
+            screen.key(999);
+        } catch (UnsupportedOperationException e) {
+            unsupported = true;
+        }
+        assert unsupported;
+        assert screen.isOn() == null && !screen.can("apps") && screen.can("volume");
+
         assert Philips.signature(1700000000L, "4321").equals("ZWUxMDA3MTYyMTAzMDIwYjFjMzhmODBmODhlNGY1ZWI3NjdkODM0Zg==")
             : Philips.signature(1700000000L, "4321");
 
