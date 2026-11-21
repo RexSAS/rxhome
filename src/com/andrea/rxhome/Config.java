@@ -125,6 +125,7 @@ final class Config {
     private static Screen screen(Tvs.Saved s) {
         switch (s.brand) {
             case "samsung": return new Samsung(s.ip, s.auth, s.pin, s.mac, s.id);
+            case "samsung-legacy": return new SamsungLegacy(s.ip, s.id);
             case "lg": return new Lg(s.ip, s.auth, s.pin, s.mac);
             case "philips": return new Philips(s.ip, s.auth, s.pass, s.pin, s.mac);
             default: return null;
@@ -163,7 +164,7 @@ final class Config {
         Tvs.Saved a = active();
         if (a != null && a.hasStick()) out.add(a.stickIp + ":5555");
         if (a != null && !a.ip.isEmpty()) {
-            int port = a.brand.equals("samsung") ? 8001 : a.brand.equals("lg") ? 3001 : 1925;
+            int port = a.brand.equals("samsung") ? 8001 : a.brand.equals("samsung-legacy") ? 55000 : a.brand.equals("lg") ? 3001 : 1925;
             out.add(a.ip + ":" + port);
         }
         for (String ip : Scenes.lights(get(LIGHTS)).values()) out.add(ip + ":80");

@@ -135,7 +135,8 @@ public class SettingsActivity extends Activity {
 
     private static String brandName(String brand) {
         switch (brand) {
-            case "samsung": return "Samsung";
+            case "samsung":
+            case "samsung-legacy": return "Samsung";
             case "lg": return "LG";
             case "philips": return "Philips";
             case "firetv": return "FireStick";
@@ -237,6 +238,17 @@ public class SettingsActivity extends Activity {
                         t.auth = p.token;
                         t.pin = p.pin;
                         saveTv(t, scan, "Added " + f.name);
+                    } catch (IOException e) {
+                        toast(e.getMessage());
+                    }
+                });
+                break;
+            case "samsung-legacy":
+                toast("Look at the TV and choose Allow");
+                io.execute(() -> {
+                    try {
+                        SamsungLegacy.pair(f.ip);
+                        saveTv(tv(f), scan, "Added " + f.name + ". It switches on only with its own remote");
                     } catch (IOException e) {
                         toast(e.getMessage());
                     }

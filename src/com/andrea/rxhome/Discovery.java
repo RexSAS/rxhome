@@ -171,7 +171,8 @@ final class Discovery {
     }
 
     /**
-     * Every TV and FireStick on this Wi-Fi, each with a lasting id: Samsung's own device id, LG's and
+     * Every TV and FireStick on this Wi-Fi, each with a lasting id: Samsung's own device id (older ones:
+     * their UPnP uuid), LG's and
      * Philips' certificate pin; a FireStick's serial (only if it already trusts our key: the scan
      * never offers it, so nothing gets a prompt).
      */
@@ -181,6 +182,7 @@ final class Discovery {
         ExecutorService pool = Executors.newFixedThreadPool(5);
         try {
             Future<List<String>> samsung = pool.submit(() -> open(hosts, 8001, CONNECT_MS));
+            Future<List<String>> oldSamsung = pool.submit(() -> open(hosts, 55000, CONNECT_MS));
             Future<List<String>> lg = pool.submit(() -> open(hosts, 3001, CONNECT_MS));
             Future<List<String>> philips = pool.submit(() -> open(hosts, 1925, CONNECT_MS));
             Future<List<String>> adb = pool.submit(() -> open(hosts, 5555, CONNECT_MS));
@@ -188,6 +190,12 @@ final class Discovery {
             for (String h : samsung.get()) {
                 String[] info = Samsung.info(h);
                 if (info != null && taken.add(h)) out.add(new TvFound("samsung", h, info[0], info[1], info[2]));
+            }
+            for (String h : oldSamsung.get()) { // pre-2016 (e.g. F series): remote on 55000, no 8001
+                if (taken.contains(h)) continue;
+                String uuid = SamsungLegacy.uuid(h);
+                taken.add(h);
+                out.add(new TvFound("samsung-legacy", h, uuid == null ? null : "uuid:" + uuid, "Samsung TV", null));
             }
             for (String h : lg.get()) {
                 if (taken.contains(h)) continue;
