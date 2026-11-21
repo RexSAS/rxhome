@@ -369,7 +369,9 @@ public class MainActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout text = new LinearLayout(this);
         text.setOrientation(LinearLayout.VERTICAL);
-        text.addView(Ui.text(this, "Tv", 18, Ui.TEXT, true));
+        tvTitle = Ui.text(this, "Tv", 18, Ui.TEXT, true);
+        tvTitle.setOnClickListener(v -> chooseTv());
+        text.addView(tvTitle);
         tvStatus = Ui.text(this, "", 13, Ui.DIM, false);
         tvRing = new StatusRing(this);
         text.addView(statusLine(tvRing, tvStatus));
@@ -395,7 +397,38 @@ public class MainActivity extends Activity {
         return tvTile;
     }
 
+    private TextView tvTitle;
+
+    /** Several TVs saved (other homes): tap the TV card's title to pick the one to use. */
+    private void chooseTv() {
+        java.util.List<Tvs.Saved> list = cfg.saved();
+        if (list.isEmpty()) {
+            startActivity(new Intent(this, SettingsActivity.class));
+            return;
+        }
+        String[] names = new String[list.size()];
+        for (int i = 0; i < names.length; i++) names[i] = list.get(i).name;
+        new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Which TV?")
+            .setItems(names, (d, which) -> {
+                cfg.setActive(list.get(which).uid);
+                refresh();
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
     private void showTv(State s, boolean fresh) {
+        Tvs.Saved active = cfg.active();
+        tvTitle.setText(active == null ? "Tv" : active.name + (cfg.saved().size() > 1 ? "  ▾" : ""));
+        if (active == null) {
+            Ui.setText(tvStatus, "No TV yet: tap here to add one");
+            tvStatus.setTextColor(Ui.DIM);
+            tvRing.set(StatusRing.UNKNOWN);
+            tvStatus.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
+            return;
+        }
+        tvStatus.setOnClickListener(null);
         boolean paired = cfg.tv().hasScreen(); // then the state is the TV's own, else the FireStick's
         Ui.setText(tvStatus, s == State.ON ? (paired ? "On" : "On · FireStick")
             : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);

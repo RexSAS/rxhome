@@ -103,6 +103,77 @@ final class Tvs {
         return n == 1 ? only : "";
     }
 
+    /** A FireStick on its own (brand none), as added from Settings. */
+    static Saved stick(String ip, String serial) {
+        Saved s = new Saved();
+        s.name = "FireStick";
+        s.stickIp = ip;
+        s.stickId = serial;
+        return s;
+    }
+
+    /**
+     * Saves a newly paired TV or FireStick into list: the same one again is updated in place (keeping its
+     * uid, FireStick and switch); a FireStick joins the one saved TV found here that has none; a TV takes
+     * the one lone FireStick found here. scan = what this Wi-Fi shows now.
+     */
+    static void add(List<Saved> list, Saved n, List<Discovery.TvFound> scan) {
+        if (n.brand.equals("none")) {
+            for (Saved s : list) {
+                if (s.hasStick() && s.stickId.equals(n.stickId)) {
+                    s.stickIp = n.stickIp;
+                    return;
+                }
+            }
+            Saved only = null;
+            int count = 0;
+            for (Saved s : list) {
+                if (s.brand.equals("none") || s.hasStick() || !here(scan, s.brand, s.id)) continue;
+                only = s;
+                count++;
+            }
+            if (count == 1) {
+                only.stickIp = n.stickIp;
+                only.stickId = n.stickId;
+            } else {
+                list.add(n);
+            }
+            return;
+        }
+        for (Saved s : list) {
+            if (s.brand.equals(n.brand) && !n.id.isEmpty() && s.id.equals(n.id)) {
+                s.ip = n.ip;
+                s.name = n.name;
+                s.mac = n.mac.isEmpty() ? s.mac : n.mac;
+                s.auth = n.auth;
+                s.pass = n.pass;
+                s.pin = n.pin;
+                return;
+            }
+        }
+        Saved lone = null;
+        int count = 0;
+        for (Saved s : list) {
+            if (!s.brand.equals("none") || !here(scan, "firetv", s.stickId)) continue;
+            lone = s;
+            count++;
+        }
+        if (count == 1) {
+            n.stickIp = lone.stickIp;
+            n.stickId = lone.stickId;
+            n.uid = lone.uid; // the same entry, now with its TV
+            list.set(list.indexOf(lone), n);
+        } else {
+            list.add(n);
+        }
+    }
+
+    private static boolean here(List<Discovery.TvFound> scan, String brand, String id) {
+        if (id.isEmpty()) return false;
+        for (Discovery.TvFound f : scan) if (f.brand.equals(brand) && id.equals(f.id)) return true;
+        return false;
+    }
+
     /** The settings before multi-TV: the FireStick, plus the Philips if it was paired. */
     static Saved migrate(String fireIp, String philipsIp, String user, String pass, String cert, String mac) {
         Saved s = new Saved();

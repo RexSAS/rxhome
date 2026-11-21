@@ -78,5 +78,38 @@ public class TvsTest {
         // Never paired with the Philips: the old setup is just the FireStick.
         Tvs.Saved stickOnly = Tvs.migrate("1.1.1.49", "1.1.1.221", "", "", "", "");
         assert stickOnly.brand.equals("none") && stickOnly.stickIp.equals("1.1.1.49");
+
+        // Adding: a TV not seen before is added.
+        List<Tvs.Saved> list = new ArrayList<>();
+        Tvs.Saved lg = saved("lg", "uuid:L", "1.1.1.2");
+        lg.auth = "key1";
+        Tvs.add(list, lg, Arrays.<Discovery.TvFound>asList());
+        assert list.size() == 1;
+        // Adding the same TV again (paired again): updated in place, same uid, its FireStick kept.
+        list.get(0).stickIp = "1.1.1.3";
+        list.get(0).stickId = "S1";
+        list.get(0).inputToTv = true;
+        String uid = list.get(0).uid;
+        Tvs.Saved again = saved("lg", "uuid:L", "1.1.1.5");
+        again.auth = "key2";
+        Tvs.add(list, again, Arrays.<Discovery.TvFound>asList());
+        assert list.size() == 1 && list.get(0).uid.equals(uid) && list.get(0).auth.equals("key2") && list.get(0).ip.equals("1.1.1.5");
+        assert list.get(0).stickId.equals("S1") && list.get(0).inputToTv;
+
+        // A FireStick added in a home with one saved TV (found here, no stick yet): attached to it.
+        list = new ArrayList<>(Arrays.asList(saved("samsung", "uuid:S", "1.1.1.20")));
+        Tvs.add(list, Tvs.stick("1.1.1.21", "FS"), Arrays.asList(found("samsung", "1.1.1.20", "uuid:S")));
+        assert list.size() == 1 && list.get(0).stickId.equals("FS") && list.get(0).stickIp.equals("1.1.1.21");
+        // ...but not to a TV that isn't here: saved alone.
+        list = new ArrayList<>(Arrays.asList(saved("samsung", "uuid:S", "1.1.1.20")));
+        Tvs.add(list, Tvs.stick("1.1.1.21", "FS"), Arrays.<Discovery.TvFound>asList());
+        assert list.size() == 2 && list.get(1).brand.equals("none") && list.get(0).stickId.isEmpty();
+        // Then the TV added later picks up the lone FireStick found here.
+        list = new ArrayList<>(Arrays.asList(Tvs.stick("1.1.1.21", "FS")));
+        Tvs.add(list, saved("philips", "uuid:P", "1.1.1.22"), Arrays.asList(found("firetv", "1.1.1.21", "FS")));
+        assert list.size() == 1 && list.get(0).brand.equals("philips") && list.get(0).stickId.equals("FS");
+        // A FireStick already saved: just its IP updated.
+        Tvs.add(list, Tvs.stick("1.1.1.30", "FS"), Arrays.<Discovery.TvFound>asList());
+        assert list.size() == 1 && list.get(0).stickIp.equals("1.1.1.30");
     }
 }
