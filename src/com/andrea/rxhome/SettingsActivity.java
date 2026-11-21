@@ -50,14 +50,21 @@ public class SettingsActivity extends Activity {
         pick.setOnClickListener(this::pickBot);
         col.addView(pick);
 
-        section(col, "TV");
+        section(col, "TVs");
         TextView found = Ui.text(this, cfg.foundLine(), 13, Ui.DIM, false);
         found.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 8));
         col.addView(found);
-        col.addView(Ui.text(this, "Philips TV: pair once (with the TV on) for its volume, mute and power.", 13, Ui.DIM, false));
-        TextView pairTv = Ui.button(this,cfg.get(Config.PHILIPS_USER).isEmpty() ? "PAIR WITH THE TV" : "PAIR WITH THE TV AGAIN", false);
-        pairTv.setOnClickListener(this::pairTv);
-        col.addView(pairTv);
+        col.addView(Ui.text(this, "Samsung, LG, Philips and FireSticks, in any home: add each once, with the TV on. "
+            + "The app picks the one on the Wi-Fi you're on; tap a TV to use it now.", 13, Ui.DIM, false));
+        tvList = new LinearLayout(this);
+        tvList.setOrientation(LinearLayout.VERTICAL);
+        col.addView(tvList);
+        showTvs();
+        TextView add = Ui.button(this, "ADD A TV", false);
+        add.setOnClickListener(this::addTv);
+        LinearLayout.LayoutParams addLp = new LinearLayout.LayoutParams(-1, -2);
+        addLp.topMargin = Ui.dp(this, 8);
+        col.addView(add, addLp);
 
         section(col, "Jellyfin (RxFilms shortcuts)");
         col.addView(Ui.text(this, "For Continue watching / Next up in Apps: sign in once with Quick Connect.", 13, Ui.DIM, false));
@@ -124,24 +131,182 @@ public class SettingsActivity extends Activity {
         return e;
     }
 
-    /** The TV shows a PIN; typing it here gives rxhome a login for the TV's own API. */
-    private void pairTv(View v) {
+    private LinearLayout tvList;
+
+    private static String brandName(String brand) {
+        switch (brand) {
+            case "samsung": return "Samsung";
+            case "lg": return "LG";
+            case "philips": return "Philips";
+            case "firetv": return "FireStick";
+            default: return "FireStick";
+        }
+    }
+
+    /** Saved TVs: tap one to use it now, or remove it. */
+    private void showTvs() {
+        tvList.removeAllViews();
+        Tvs.Saved active = cfg.active();
+        for (Tvs.Saved t : cfg.saved()) {
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(0, Ui.dp(this, 8), 0, 0);
+            String label = brandName(t.brand) + " · " + t.name + (t.hasStick() && !t.brand.equals("none") ? " + FireStick" : "")
+                + (active != null && active.uid.equals(t.uid) ? "  (in use)" : "");
+            TextView name = Ui.text(this, label, 15, Ui.TEXT, false);
+            name.setMinHeight(Ui.dp(this, 48));
+            name.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            name.setOnClickListener(v -> {
+                cfg.setActive(t.uid);
+                showTvs();
+            });
+            name.setContentDescription("Use " + label);
+            row.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView remove = Ui.button(this, "REMOVE", false);
+            remove.setTextSize(12);
+            remove.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Remove " + brandName(t.brand) + " · " + t.name + "?")
+                .setMessage("You can add it again later (the TV will ask again).")
+                .setPositiveButton("Remove", (d, w) -> {
+                    java.util.List<Tvs.Saved> list = cfg.saved();
+                    for (int i = list.size() - 1; i >= 0; i--) if (list.get(i).uid.equals(t.uid)) list.remove(i);
+                    cfg.save(list);
+                    showTvs();
+                })
+                .setNegativeButton("Cancel", null)
+                .show());
+            row.addView(remove);
+            tvList.addView(row);
+        }
+        if (cfg.saved().isEmpty()) tvList.addView(Ui.text(this, "No TVs yet.", 13, Ui.DIM, false));
+    }
+
+    private void toast(String m) {
+        runOnUiThread(() -> { if (!isFinishing()) Toast.makeText(this, m, Toast.LENGTH_LONG).show(); });
+    }
+
+    /** Scans this Wi-Fi and lists what's there; tapping one pairs it. Nothing gets a prompt until then. */
+    private void addTv(View v) {
+        String me = Discovery.wifiIp();
+        if (me == null) {
+            toast("Connect to the Wi-Fi the TV is on first");
+            return;
+        }
+        Toast.makeText(this, "Looking for TVs on this Wi-Fi…", Toast.LENGTH_SHORT).show();
         io.execute(() -> {
-            try {
-                if (!Discovery.isPhilips(cfg.get(Config.PHILIPS_IP))) { // moved, or never found: look for it
-                    String me = Discovery.wifiIp();
-                    if (me != null) cfg.found(Discovery.find(me, cfg.adbKey()));
-                }
-                String ip = cfg.get(Config.PHILIPS_IP);
-                Philips.Pairing p = Philips.pairRequest(ip);
-                runOnUiThread(() -> askPin(ip, p));
-            } catch (IOException e) {
-                runOnUiThread(() -> Toast.makeText(this, "Can't reach the TV (is it on?): " + e.getMessage(), Toast.LENGTH_LONG).show());
-            }
+            java.util.List<Discovery.TvFound> scan = Discovery.findTvs(me, cfg.adbKey());
+            runOnUiThread(() -> pickTv(scan));
         });
     }
 
-    private void askPin(String ip, Philips.Pairing p) {
+    private void pickTv(java.util.List<Discovery.TvFound> scan) {
+        if (isFinishing()) return;
+        if (scan.isEmpty()) {
+            toast("No TV found on this Wi-Fi. Is it on, and on this network?");
+            return;
+        }
+        java.util.Set<String> saved = new java.util.HashSet<>();
+        for (Tvs.Saved t : cfg.saved()) {
+            saved.add(t.brand + "|" + t.id);
+            saved.add("firetv|" + t.stickId);
+        }
+        String[] items = new String[scan.size()];
+        for (int i = 0; i < items.length; i++) {
+            Discovery.TvFound f = scan.get(i);
+            items[i] = brandName(f.brand) + " · " + f.name + " (" + f.ip + ")" + (saved.contains(f.brand + "|" + f.id) ? " · saved" : "");
+        }
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Which one?")
+            .setItems(items, (d, which) -> pair(scan.get(which), scan))
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void pair(Discovery.TvFound f, java.util.List<Discovery.TvFound> scan) {
+        switch (f.brand) {
+            case "samsung":
+                toast("Look at the TV and choose Allow");
+                io.execute(() -> {
+                    try {
+                        Samsung.Pairing p = Samsung.pair(f.ip);
+                        Tvs.Saved t = tv(f);
+                        t.auth = p.token;
+                        t.pin = p.pin;
+                        saveTv(t, scan, "Added " + f.name);
+                    } catch (IOException e) {
+                        toast(e.getMessage());
+                    }
+                });
+                break;
+            case "lg":
+                toast("Look at the TV and choose Accept");
+                io.execute(() -> {
+                    try {
+                        Lg.Pairing p = Lg.pair(f.ip);
+                        Tvs.Saved t = tv(f);
+                        t.auth = p.clientKey;
+                        t.pin = p.pin;
+                        String mac = new Lg(f.ip, p.clientKey, p.pin, null).readMac();
+                        if (mac != null) t.mac = mac;
+                        saveTv(t, scan, "Added. To switch it on from the phone, turn on \"Turn on via Wi-Fi\" "
+                            + "(or \"Mobile TV On\") in the TV's settings");
+                    } catch (IOException e) {
+                        toast(e.getMessage());
+                    }
+                });
+                break;
+            case "philips":
+                io.execute(() -> {
+                    try {
+                        Philips.Pairing p = Philips.pairRequest(f.ip);
+                        runOnUiThread(() -> askPin(f, p, scan));
+                    } catch (IOException e) {
+                        toast("Can't reach the TV (is it on?): " + e.getMessage());
+                    }
+                });
+                break;
+            default: // firetv
+                if (f.id != null) {
+                    saveTv(Tvs.stick(f.ip, f.id), scan, "Added the FireStick");
+                    return;
+                }
+                toast("On the TV: tick \"Always allow\", then Allow. If nothing shows, turn on ADB debugging "
+                    + "in the FireStick's Settings → My Fire TV → Developer options");
+                io.execute(() -> {
+                    Adb a = new Adb(f.ip, 5555, cfg.adbKey());
+                    try {
+                        String serial = a.shell("getprop ro.serialno", 5000).trim();
+                        saveTv(Tvs.stick(f.ip, serial.isEmpty() ? f.ip : serial), scan, "Added the FireStick");
+                    } catch (IOException e) {
+                        toast("The FireStick didn't allow it: " + e.getMessage());
+                    } finally {
+                        a.close();
+                    }
+                });
+        }
+    }
+
+    private static Tvs.Saved tv(Discovery.TvFound f) {
+        Tvs.Saved t = new Tvs.Saved();
+        t.brand = f.brand;
+        t.id = f.id == null ? "" : f.id;
+        t.name = f.name;
+        t.ip = f.ip;
+        t.mac = f.mac == null ? "" : f.mac;
+        return t;
+    }
+
+    private void saveTv(Tvs.Saved t, java.util.List<Discovery.TvFound> scan, String done) {
+        java.util.List<Tvs.Saved> list = cfg.saved();
+        Tvs.add(list, t, scan);
+        cfg.save(list);
+        cfg.foundTvs(scan); // makes it the TV in use if it's the one here
+        toast(done);
+        runOnUiThread(this::showTvs);
+    }
+
+    /** The Philips shows a PIN; typing it here gives rxhome a login for the TV's own API. */
+    private void askPin(Discovery.TvFound f, Philips.Pairing p, java.util.List<Discovery.TvFound> scan) {
         if (isFinishing()) return;
         EditText pin = new EditText(this);
         pin.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -151,23 +316,22 @@ public class SettingsActivity extends Activity {
             .setView(pin)
             .setPositiveButton("Pair", (d, w) -> io.execute(() -> {
                 try {
-                    Philips.pairGrant(ip, p, pin.getText().toString());
+                    Philips.pairGrant(f.ip, p, pin.getText().toString());
+                    Tvs.Saved t = tv(f);
+                    t.auth = p.deviceId;
+                    t.pass = p.authKey;
+                    t.pin = p.certPin;
                     String mac = null;
                     try {
-                        mac = new Philips(ip, p.deviceId, p.authKey, p.certPin).mac();
+                        mac = new Philips(f.ip, p.deviceId, p.authKey, p.certPin).mac();
                     } catch (IOException e) {
                         // Without the MAC the TV can still be switched off, just not woken from standby.
                     }
-                    cfg.put(Config.PHILIPS_IP, ip);
-                    cfg.put(Config.PHILIPS_USER, p.deviceId);
-                    cfg.put(Config.PHILIPS_PASS, p.authKey);
-                    cfg.put(Config.PHILIPS_CERT, p.certPin);
-                    if (mac != null) cfg.put(Config.PHILIPS_MAC, mac);
-                    String done = mac != null ? "Paired with the TV"
-                        : "Paired with the TV (couldn't read its MAC: switching it on may not work)";
-                    runOnUiThread(() -> Toast.makeText(this, done, Toast.LENGTH_LONG).show());
+                    if (mac != null) t.mac = mac;
+                    saveTv(t, scan, mac != null ? "Paired with the TV"
+                        : "Paired with the TV (couldn't read its MAC: switching it on may not work)");
                 } catch (IOException e) {
-                    runOnUiThread(() -> Toast.makeText(this, "Pairing failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+                    toast("Pairing failed: " + e.getMessage());
                 }
             }))
             .setNegativeButton("Cancel", null)
