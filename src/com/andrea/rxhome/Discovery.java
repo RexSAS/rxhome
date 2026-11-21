@@ -179,10 +179,11 @@ final class Discovery {
     static List<TvFound> findTvs(String myIp, KeyPair key) {
         List<String> hosts = subnet(myIp);
         List<TvFound> out = new java.util.ArrayList<>();
-        ExecutorService pool = Executors.newFixedThreadPool(5);
+        ExecutorService pool = Executors.newFixedThreadPool(6);
         try {
             Future<List<String>> samsung = pool.submit(() -> open(hosts, 8001, CONNECT_MS));
             Future<List<String>> oldSamsung = pool.submit(() -> open(hosts, 55000, CONNECT_MS));
+            Future<List<String>> sky = pool.submit(() -> open(hosts, 49160, CONNECT_MS));
             Future<List<String>> lg = pool.submit(() -> open(hosts, 3001, CONNECT_MS));
             Future<List<String>> philips = pool.submit(() -> open(hosts, 1925, CONNECT_MS));
             Future<List<String>> adb = pool.submit(() -> open(hosts, 5555, CONNECT_MS));
@@ -196,6 +197,12 @@ final class Discovery {
                 String uuid = SamsungLegacy.uuid(h);
                 taken.add(h);
                 out.add(new TvFound("samsung-legacy", h, uuid == null ? null : "uuid:" + uuid, "Samsung TV", null));
+            }
+            for (String h : sky.get()) { // Sky Q's network remote
+                if (taken.contains(h)) continue;
+                taken.add(h);
+                String uuid = upnpUuid(h, "upnp:rootdevice");
+                out.add(new TvFound("sky", h, uuid == null ? null : "uuid:" + uuid, "Sky", null));
             }
             for (String h : lg.get()) {
                 if (taken.contains(h)) continue;
@@ -231,6 +238,49 @@ final class Discovery {
             pool.shutdownNow();
         }
         return out;
+    }
+
+    /**
+     * A device's lasting id: the uuid it gives when asked directly (a UPnP search sent to it, not to
+     * everyone) for service type st; the smallest if it answers for several. Null if it doesn't answer.
+     */
+    static String upnpUuid(String ip, String st) {
+        byte[] m = ("M-SEARCH * HTTP/1.1\r\nHOST: " + ip + ":1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: " + st
+            + "\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        String best = null;
+        try (java.net.DatagramSocket s = new java.net.DatagramSocket()) {
+            s.setSoTimeout(700);
+            for (int attempt = 0; attempt < 2 && best == null; attempt++) { // UDP: one retry
+                s.send(new java.net.DatagramPacket(m, m.length, java.net.InetAddress.getByName(ip), 1900));
+                long until = System.currentTimeMillis() + 1500;
+                while (System.currentTimeMillis() < until) {
+                    byte[] buf = new byte[2048];
+                    java.net.DatagramPacket p = new java.net.DatagramPacket(buf, buf.length);
+                    try {
+                        s.receive(p);
+                    } catch (java.net.SocketTimeoutException e) {
+                        break;
+                    }
+                    String u = parseUuid(new String(p.getData(), 0, p.getLength(), java.nio.charset.StandardCharsets.UTF_8));
+                    if (u != null && (best == null || u.compareTo(best) < 0)) best = u;
+                }
+            }
+        } catch (IOException e) {
+            // no answer
+        }
+        return best;
+    }
+
+    static String parseUuid(String response) {
+        for (String line : response.split("\r?\n")) {
+            int c = line.indexOf(':');
+            if (c < 0 || !line.substring(0, c).trim().equalsIgnoreCase("usn")) continue;
+            String v = line.substring(c + 1).trim();
+            if (!v.toLowerCase(java.util.Locale.ROOT).startsWith("uuid:")) return null;
+            int end = v.indexOf("::");
+            return v.substring(5, end < 0 ? v.length() : end);
+        }
+        return null;
     }
 
     /** The pin of the TV's certificate on tlsPort (the one it's paired with): the same every scan. */

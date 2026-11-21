@@ -5,20 +5,52 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One saved TV: its own API (Screen) and/or a FireStick on it. Power, volume and inputs go to the TV;
- * apps, RxFilms, Spotify and Claude FM to the stick; d-pad input to the stick unless the remote's switch
- * says TV. Either part may be missing.
+ * One saved TV: its own API (Screen) and what's bound to it, a FireStick and/or a Sky box. Power,
+ * volume and inputs go to the TV; apps, RxFilms, Spotify and Claude FM to the stick; the d-pad and
+ * touchpad to whichever the remote's style says ("tv", "stick", "sky"). Any part may be missing.
  */
 class Tv {
 
     private final Screen screen;
     private final FireTv stick;
-    private volatile boolean inputToTv;
+    private final Sky sky;
+    private volatile String input;
 
-    Tv(Screen screen, FireTv stick, boolean inputToTv) {
+    Tv(Screen screen, FireTv stick, Sky sky, String input) {
         this.screen = screen;
         this.stick = stick;
-        this.inputToTv = inputToTv;
+        this.sky = sky;
+        this.input = input == null ? "" : input;
+    }
+
+    /** The remote's styles this TV has, in button order: "tv", "stick", "sky". */
+    List<String> modes() {
+        List<String> m = new ArrayList<>();
+        if (screen != null) m.add("tv");
+        if (stick != null) m.add("stick");
+        if (sky != null) m.add("sky");
+        return m;
+    }
+
+    /** The style in use: the one picked, if this TV still has it; else the FireStick, the Sky box, the TV. */
+    String mode() {
+        List<String> m = modes();
+        if (m.contains(input)) return input;
+        return stick != null ? "stick" : sky != null ? "sky" : "tv";
+    }
+
+    void setMode(String mode) {
+        input = mode;
+    }
+
+    boolean hasSky() {
+        return sky != null;
+    }
+
+    /** A Sky key by its Sky code (channel up, colours, record...): only in Sky style. */
+    void skyKey(int code) throws IOException {
+        if (sky == null) throw new IOException("No Sky box on this TV: bind one in Settings → TVs");
+        sky.press(code);
     }
 
     boolean hasScreen() {
@@ -29,17 +61,9 @@ class Tv {
         return stick != null;
     }
 
-    /** The remote's FireStick | TV switch: only when there are both. */
+    /** The remote's style buttons: only when there's something besides the TV. */
     boolean showSwitch() {
-        return screen != null && stick != null;
-    }
-
-    boolean inputToTv() {
-        return inputToTv;
-    }
-
-    void setInputToTv(boolean toTv) {
-        inputToTv = toTv;
+        return modes().size() > 1;
     }
 
     /** "films" (RxFilms / Spotify / Claude FM), "volume" (a level), "mute", "apps", "power". */
@@ -49,7 +73,7 @@ class Tv {
             case "volume":
             case "mute": return screen != null && screen.can(what);
             case "apps": return stick != null || screen != null && screen.can("apps");
-            default: return screen != null || stick != null;
+            default: return screen != null || stick != null || sky != null;
         }
     }
 
@@ -63,9 +87,10 @@ class Tv {
 
     // --- state ---
 
-    /** The device we talk to: the stick if there is one, else the TV's own word. */
+    /** The device we talk to: the stick if there is one, else the TV's own word, else the Sky box answering. */
     State state() {
         if (stick != null) return stick.state();
+        if (screen == null && sky != null) return sky.answers() ? State.ON : State.UNREACHABLE;
         Boolean on = screen == null ? null : screen.isOn();
         return on == null ? State.UNREACHABLE : on ? State.ON : State.OFF;
     }
@@ -93,6 +118,10 @@ class Tv {
 
     /** A TV alone that can't tell its power (Philips) alternates, starting with on, so off is always reachable. */
     void togglePower(State s) throws IOException {
+        if (screen == null && stick == null && sky != null) { // a Sky box alone: its own power key
+            sky.press(Sky.POWER);
+            return;
+        }
         State t = tvState(s);
         boolean off = t == State.ON || t == State.UNREACHABLE && screen != null && stick == null && lastWasWake;
         if (off) sleep();
@@ -126,30 +155,29 @@ class Tv {
         if (stick != null) stick.sleep();
     }
 
-    // --- input (the switch decides) ---
-
-    private boolean toStick() {
-        return stick != null && (screen == null || !inputToTv);
-    }
+    // --- input (the remote's style decides) ---
 
     void key(int code) throws IOException {
-        if (toStick()) stick.key(code);
-        else need().key(code);
+        switch (mode()) {
+            case "stick": stick.key(code); break;
+            case "sky": sky.key(code); break;
+            default: need().key(code);
+        }
     }
 
     void keyDown(int code) throws IOException {
-        if (toStick()) stick.keyDown(code);
-        else need().key(code);
+        if (mode().equals("stick")) stick.keyDown(code);
+        else key(code);
     }
 
-    /** TV: each repeat is one more press (their APIs have no hold). */
+    /** TV and Sky: each repeat is one more press (no hold there). */
     void keyRepeat(int code, int n) throws IOException {
-        if (toStick()) stick.keyRepeat(code, n);
-        else need().key(code);
+        if (mode().equals("stick")) stick.keyRepeat(code, n);
+        else key(code);
     }
 
     void keyUp(int code) {
-        if (toStick()) stick.keyUp(code);
+        if (mode().equals("stick")) stick.keyUp(code);
     }
 
     // --- always the TV ---

@@ -81,12 +81,12 @@ final class Config {
         put(TV_ACTIVE, uid);
     }
 
-    /** The remote's FireStick | TV switch, kept per TV. */
-    synchronized void setInputToTv(boolean toTv) {
+    /** The remote's style ("tv", "stick", "sky") for the TV in use, kept per TV. */
+    synchronized void setInput(String mode) {
         Tvs.Saved a = active();
         if (a == null) return;
         java.util.List<Tvs.Saved> list = saved();
-        for (Tvs.Saved s : list) if (s.uid.equals(a.uid)) s.inputToTv = toTv;
+        for (Tvs.Saved s : list) if (s.uid.equals(a.uid)) s.input = mode;
         save(list);
     }
 
@@ -108,7 +108,7 @@ final class Config {
     /** The TV in use (Remote, Apps, scenes). */
     synchronized Tv tv() {
         Tvs.Saved a = active();
-        return a == null ? new Tv(null, null, false) : tv(a);
+        return a == null ? new Tv(null, null, null, "") : tv(a);
     }
 
     /**
@@ -116,17 +116,17 @@ final class Config {
      * survive moving between screens. Rebuilt when that TV's settings change.
      */
     synchronized Tv tv(Tvs.Saved a) {
-        // The remote's switch isn't part of the key: flipping it mustn't drop the stick's connections.
-        boolean toTv = a.inputToTv;
-        a.inputToTv = false;
+        // The remote's style isn't part of the key: changing it mustn't drop the stick's connections.
+        String input = a.input;
+        a.input = "";
         String key = Tvs.format(java.util.Collections.singletonList(a));
-        a.inputToTv = toTv;
+        a.input = input;
         Tv t = TVS_BY_UID.get(a.uid);
         if (t == null || !key.equals(KEYS_BY_UID.get(a.uid))) {
             if (t != null) t.close();
             FireTv stick = a.hasStick() ? stick(a.stickIp) : null;
             if (stick != null && !a.stickId.equals(a.stickIp)) stick.serial = a.stickId; // ip = no serial was readable
-            t = new Tv(screen(a), stick, a.inputToTv);
+            t = new Tv(screen(a), stick, a.hasSky() ? new Sky(a.skyIp) : null, a.input);
             TVS_BY_UID.put(a.uid, t);
             KEYS_BY_UID.put(a.uid, key);
         }
@@ -174,7 +174,8 @@ final class Config {
         java.util.List<String> out = new java.util.ArrayList<>();
         Tvs.Saved a = active();
         if (a != null && a.hasStick()) out.add(a.stickIp + ":5555");
-        if (a != null && !a.ip.isEmpty()) {
+        if (a != null && a.hasSky()) out.add(a.skyIp + ":49160");
+        if (a != null && !a.ip.isEmpty() && !a.brand.equals("none")) {
             int port = a.brand.equals("samsung") ? 8001 : a.brand.equals("samsung-legacy") ? 55000 : a.brand.equals("lg") ? 3001 : 1925;
             out.add(a.ip + ":" + port);
         }

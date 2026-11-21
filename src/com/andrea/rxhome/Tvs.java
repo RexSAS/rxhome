@@ -12,19 +12,28 @@ import org.json.JSONObject;
  */
 final class Tvs {
 
-    /** brand: samsung | lg | philips | none (a FireStick alone). auth: Samsung token / LG client-key / Philips user. */
+    /**
+     * A TV and what's plugged into it (bound in its TV info page), or an add-on on its own (brand none:
+     * one FireStick or one Sky box). brand: samsung | samsung-legacy | lg | philips | none.
+     * auth: Samsung token / LG client-key / Philips user. input: the remote's style ("" = default).
+     */
     static final class Saved {
-        // uid: rxhome's own key for this entry (which TV is active, the remote switch), never changes.
+        // uid: rxhome's own key for this entry (which TV is active, the remote style), never changes.
         String uid = java.util.UUID.randomUUID().toString();
-        String id = "", name = "", brand = "none", ip = "", mac = "", auth = "", pass = "", pin = "", stickIp = "", stickId = "";
-        boolean inputToTv;
+        String id = "", name = "", brand = "none", ip = "", mac = "", auth = "", pass = "", pin = "", stickIp = "", stickId = "",
+            skyIp = "", skyId = "", input = "";
 
         boolean hasStick() {
             return !stickIp.isEmpty();
         }
+
+        boolean hasSky() {
+            return !skyIp.isEmpty();
+        }
     }
 
-    private static final String[] FIELDS = {"id", "name", "brand", "ip", "mac", "auth", "pass", "pin", "stickIp", "stickId"};
+    private static final String[] FIELDS = {"id", "name", "brand", "ip", "mac", "auth", "pass", "pin", "stickIp", "stickId",
+        "skyIp", "skyId", "input"};
 
     private Tvs() {}
 
@@ -38,7 +47,7 @@ final class Tvs {
                 String[] v = new String[FIELDS.length];
                 for (int f = 0; f < FIELDS.length; f++) v[f] = o.optString(FIELDS[f], "");
                 set(s, v);
-                s.inputToTv = o.optBoolean("inputToTv", false);
+                if (s.input.isEmpty() && o.optBoolean("inputToTv", false)) s.input = "tv"; // an earlier build's switch
                 if (!o.optString("uid").isEmpty()) s.uid = o.optString("uid");
                 if (s.id.isEmpty() && !s.pin.isEmpty() && (s.brand.equals("philips") || s.brand.equals("lg"))) s.id = "pin:" + s.pin;
                 out.add(s);
@@ -56,7 +65,6 @@ final class Tvs {
                 JSONObject o = new JSONObject();
                 String[] v = get(s);
                 for (int f = 0; f < FIELDS.length; f++) o.put(FIELDS[f], v[f]);
-                o.put("inputToTv", s.inputToTv);
                 o.put("uid", s.uid);
                 a.put(o);
             }
@@ -79,6 +87,9 @@ final class Tvs {
                 if (f.id == null) continue;
                 if (f.brand.equals("firetv") && s.hasStick() && f.id.equals(s.stickId)) {
                     s.stickIp = f.ip;
+                    here = true;
+                } else if (f.brand.equals("sky") && s.hasSky() && f.id.equals(s.skyId)) {
+                    s.skyIp = f.ip;
                     here = true;
                 } else if (f.brand.equals(s.brand) && f.id.equals(s.id)) {
                     s.ip = f.ip;
@@ -112,66 +123,99 @@ final class Tvs {
         return s;
     }
 
+    /** A Sky box on its own, as added from Settings. */
+    static Saved sky(String ip, String id) {
+        Saved s = new Saved();
+        s.name = "Sky";
+        s.skyIp = ip;
+        s.skyId = id;
+        return s;
+    }
+
     /**
-     * Saves a newly paired TV or FireStick into list: the same one again is updated in place (keeping its
-     * uid, FireStick and switch); a FireStick joins the one saved TV found here that has none; a TV takes
-     * the one lone FireStick found here. scan = what this Wi-Fi shows now.
+     * Saves a newly paired TV, FireStick or Sky box: the same one again (wherever it is, on a TV or alone)
+     * is updated in place, keeping its uid, add-ons and remote style; anything new is added on its own.
+     * Nothing is ever attached by itself (two FireSticks in one home): that's done in TV info.
+     * True if it's new (false: already saved, just updated).
      */
-    static void add(List<Saved> list, Saved n, List<Discovery.TvFound> scan) {
-        if (n.brand.equals("none")) {
-            for (Saved s : list) {
-                if (s.hasStick() && s.stickId.equals(n.stickId)) {
-                    s.stickIp = n.stickIp;
-                    return;
-                }
-            }
-            Saved only = null;
-            int count = 0;
-            for (Saved s : list) {
-                if (s.brand.equals("none") || s.hasStick() || !here(scan, s.brand, s.id)) continue;
-                only = s;
-                count++;
-            }
-            if (count == 1) {
-                only.stickIp = n.stickIp;
-                only.stickId = n.stickId;
-            } else {
-                list.add(n);
-            }
-            return;
-        }
+    static boolean add(List<Saved> list, Saved n) {
         for (Saved s : list) {
-            if (s.brand.equals(n.brand) && !n.id.isEmpty() && s.id.equals(n.id)) {
+            if (n.hasStick() && n.brand.equals("none") && s.hasStick() && s.stickId.equals(n.stickId)) {
+                s.stickIp = n.stickIp;
+                return false;
+            }
+            if (n.hasSky() && n.brand.equals("none") && s.hasSky() && s.skyId.equals(n.skyId)) {
+                s.skyIp = n.skyIp;
+                return false;
+            }
+            if (!n.brand.equals("none") && s.brand.equals(n.brand) && !n.id.isEmpty() && s.id.equals(n.id)) {
                 s.ip = n.ip;
                 s.name = n.name;
                 s.mac = n.mac.isEmpty() ? s.mac : n.mac;
                 s.auth = n.auth;
                 s.pass = n.pass;
                 s.pin = n.pin;
-                return;
+                return false;
             }
         }
-        Saved lone = null;
-        int count = 0;
+        list.add(n);
+        return true;
+    }
+
+    /** The FireSticks ("stick") or Sky boxes ("sky") saved on their own, free to bind to a TV. */
+    static List<Saved> addOns(List<Saved> list, String kind) {
+        List<Saved> out = new ArrayList<>();
         for (Saved s : list) {
-            if (!s.brand.equals("none") || !here(scan, "firetv", s.stickId)) continue;
-            lone = s;
-            count++;
+            if (s.brand.equals("none") && (kind.equals("stick") ? s.hasStick() : s.hasSky())) out.add(s);
         }
-        if (count == 1) {
-            n.stickIp = lone.stickIp;
-            n.stickId = lone.stickId;
-            n.uid = lone.uid; // the same entry, now with its TV
-            list.set(list.indexOf(lone), n);
-        } else {
-            list.add(n);
+        return out;
+    }
+
+    /** Puts the add-on saved on its own (addOnUid) onto the TV; one the TV had of that kind goes back on its own. */
+    static void bind(List<Saved> list, String tvUid, String addOnUid) {
+        Saved tv = find(list, tvUid), a = find(list, addOnUid);
+        if (tv == null || a == null || tv == a || !a.brand.equals("none")) return;
+        int at = list.indexOf(a);
+        list.remove(a);
+        if (a.hasStick()) {
+            if (tv.hasStick()) list.add(at, stick(tv.stickIp, tv.stickId));
+            tv.stickIp = a.stickIp;
+            tv.stickId = a.stickId;
+        } else if (a.hasSky()) {
+            if (tv.hasSky()) list.add(at, sky(tv.skyIp, tv.skyId));
+            tv.skyIp = a.skyIp;
+            tv.skyId = a.skyId;
         }
     }
 
-    private static boolean here(List<Discovery.TvFound> scan, String brand, String id) {
-        if (id.isEmpty()) return false;
-        for (Discovery.TvFound f : scan) if (f.brand.equals(brand) && id.equals(f.id)) return true;
-        return false;
+    /** Takes the TV's FireStick ("stick") or Sky box ("sky") off it, saving it on its own right after the TV. */
+    static void unbind(List<Saved> list, String tvUid, String kind) {
+        Saved tv = find(list, tvUid);
+        if (tv == null) return;
+        int at = list.indexOf(tv) + 1;
+        if (kind.equals("stick") && tv.hasStick()) {
+            list.add(at, stick(tv.stickIp, tv.stickId));
+            tv.stickIp = tv.stickId = "";
+        } else if (kind.equals("sky") && tv.hasSky()) {
+            list.add(at, sky(tv.skyIp, tv.skyId));
+            tv.skyIp = tv.skyId = "";
+        }
+    }
+
+    /** Removes a TV; what was plugged into it stays, on its own. */
+    static void remove(List<Saved> list, String uid) {
+        Saved tv = find(list, uid);
+        if (tv == null) return;
+        if (!tv.brand.equals("none")) {
+            unbind(list, uid, "sky");
+            unbind(list, uid, "stick");
+        }
+        list.remove(tv);
+    }
+
+    static Saved find(List<Saved> list, String uid) {
+        for (Saved s : list) if (s.uid.equals(uid)) return s;
+        return null;
     }
 
     /** Moves the TV at i one place (delta -1 up, +1 down); nothing past either end. */
@@ -201,7 +245,7 @@ final class Tvs {
     }
 
     private static String[] get(Saved s) {
-        return new String[] {s.id, s.name, s.brand, s.ip, s.mac, s.auth, s.pass, s.pin, s.stickIp, s.stickId};
+        return new String[] {s.id, s.name, s.brand, s.ip, s.mac, s.auth, s.pass, s.pin, s.stickIp, s.stickId, s.skyIp, s.skyId, s.input};
     }
 
     private static void set(Saved s, String[] v) {
@@ -215,5 +259,8 @@ final class Tvs {
         s.pin = v[7];
         s.stickIp = v[8];
         s.stickId = v[9];
+        s.skyIp = v[10];
+        s.skyId = v[11];
+        s.input = v[12];
     }
 }

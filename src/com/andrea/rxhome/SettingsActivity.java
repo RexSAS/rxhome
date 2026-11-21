@@ -54,22 +54,17 @@ public class SettingsActivity extends Activity {
         TextView found = Ui.text(this, cfg.foundLine(), 13, Ui.DIM, false);
         found.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 8));
         col.addView(found);
-        col.addView(Ui.text(this, "Samsung, LG, Philips and FireSticks, in any home: add each once, with the TV on. "
-            + "The app picks the one on the Wi-Fi you're on; tap a TV to use it now.", 13, Ui.DIM, false));
+        col.addView(Ui.text(this, "Samsung, LG and Philips TVs, FireSticks and Sky boxes, in any home: add each once, with the "
+            + "TV on. Tap a TV for its info: its name, and which FireStick or Sky box is plugged into it.", 13, Ui.DIM, false));
         tvList = new LinearLayout(this);
         tvList.setOrientation(LinearLayout.VERTICAL);
         col.addView(tvList);
         showTvs();
-        TextView add = Ui.button(this, "ADD A TV", false);
+        TextView add = Ui.button(this, "ADD A TV, FIRESTICK OR SKY", false);
         add.setOnClickListener(this::addTv);
         LinearLayout.LayoutParams addLp = new LinearLayout.LayoutParams(-1, -2);
         addLp.topMargin = Ui.dp(this, 8);
         col.addView(add, addLp);
-        TextView order = Ui.button(this, "RENAME / REORDER", false);
-        order.setOnClickListener(v -> startActivity(new android.content.Intent(this, TvsActivity.class)));
-        LinearLayout.LayoutParams orderLp = new LinearLayout.LayoutParams(-1, -2);
-        orderLp.topMargin = Ui.dp(this, 8);
-        col.addView(order, orderLp);
 
         section(col, "Jellyfin (RxFilms shortcuts)");
         col.addView(Ui.text(this, "For Continue watching / Next up in Apps: sign in once with Quick Connect.", 13, Ui.DIM, false));
@@ -145,46 +140,60 @@ public class SettingsActivity extends Activity {
             case "lg": return "LG";
             case "philips": return "Philips";
             case "firetv": return "FireStick";
+            case "sky": return "Sky";
             default: return "FireStick";
         }
     }
 
-    /** Saved TVs: tap one to use it now, or remove it. */
+    /** Saved TVs, in home-screen order: tap one for its info, ▲ ▼ to move it. */
     private void showTvs() {
         tvList.removeAllViews();
-        Tvs.Saved active = cfg.active();
-        for (Tvs.Saved t : cfg.saved()) {
+        java.util.List<Tvs.Saved> list = cfg.saved();
+        for (int i = 0; i < list.size(); i++) {
+            Tvs.Saved t = list.get(i);
+            int at = i;
             LinearLayout row = new LinearLayout(this);
             row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             row.setPadding(0, Ui.dp(this, 8), 0, 0);
-            String label = brandName(t.brand) + " · " + t.name + (t.hasStick() && !t.brand.equals("none") ? " + FireStick" : "")
-                + (active != null && active.uid.equals(t.uid) ? "  (in use)" : "");
+            String kind = t.brand.equals("none") ? (t.hasSky() ? "Sky" : "FireStick") : brandName(t.brand);
+            String label = t.name + "  (" + kind + (t.hasStick() && !t.brand.equals("none") ? " + FireStick" : "")
+                + (t.hasSky() && !t.brand.equals("none") ? " + Sky" : "") + ")";
             TextView name = Ui.text(this, label, 15, Ui.TEXT, false);
             name.setMinHeight(Ui.dp(this, 48));
             name.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            name.setOnClickListener(v -> {
-                cfg.setActive(t.uid);
-                showTvs();
-            });
-            name.setContentDescription("Use " + label);
+            name.setContentDescription(label + ": open its info");
+            name.setOnClickListener(v -> startActivity(new android.content.Intent(this, TvInfoActivity.class)
+                .putExtra(TvInfoActivity.UID, t.uid)));
             row.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView remove = Ui.button(this, "REMOVE", false);
-            remove.setTextSize(12);
-            remove.setOnClickListener(v -> new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Remove " + brandName(t.brand) + " · " + t.name + "?")
-                .setMessage("You can add it again later (the TV will ask again).")
-                .setPositiveButton("Remove", (d, w) -> {
-                    java.util.List<Tvs.Saved> list = cfg.saved();
-                    for (int i = list.size() - 1; i >= 0; i--) if (list.get(i).uid.equals(t.uid)) list.remove(i);
-                    cfg.save(list);
-                    showTvs();
-                })
-                .setNegativeButton("Cancel", null)
-                .show());
-            row.addView(remove);
+            row.addView(arrow("▲", "Move " + t.name + " up", at > 0, () -> move(at, -1)));
+            row.addView(arrow("▼", "Move " + t.name + " down", at < list.size() - 1, () -> move(at, 1)));
             tvList.addView(row);
         }
-        if (cfg.saved().isEmpty()) tvList.addView(Ui.text(this, "No TVs yet.", 13, Ui.DIM, false));
+        if (list.isEmpty()) tvList.addView(Ui.text(this, "No TVs yet.", 13, Ui.DIM, false));
+    }
+
+    private TextView arrow(String label, String description, boolean enabled, Runnable r) {
+        TextView b = Ui.button(this, label, false);
+        b.setContentDescription(description);
+        b.setMinWidth(Ui.dp(this, 48));
+        b.setMinHeight(Ui.dp(this, 48));
+        b.setEnabled(enabled);
+        b.setAlpha(enabled ? 1f : 0.3f);
+        b.setOnClickListener(v -> {
+            Ui.haptic(v);
+            r.run();
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        lp.leftMargin = Ui.dp(this, 8);
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    private void move(int i, int delta) {
+        java.util.List<Tvs.Saved> list = cfg.saved();
+        Tvs.move(list, i, delta);
+        cfg.save(list);
+        showTvs();
     }
 
     private void toast(String m) {
@@ -215,6 +224,7 @@ public class SettingsActivity extends Activity {
         for (Tvs.Saved t : cfg.saved()) {
             saved.add(t.brand + "|" + t.id);
             saved.add("firetv|" + t.stickId);
+            saved.add("sky|" + t.skyId);
         }
         String[] items = new String[scan.size()];
         for (int i = 0; i < items.length; i++) {
@@ -229,7 +239,7 @@ public class SettingsActivity extends Activity {
     }
 
     private void pair(Discovery.TvFound f, java.util.List<Discovery.TvFound> scan) {
-        if (f.id == null && !f.brand.equals("firetv")) { // it couldn't be told apart from other TVs later
+        if (f.id == null && !f.brand.equals("firetv") && !f.brand.equals("sky")) { // it couldn't be told apart from other TVs later
             toast("Couldn't identify this TV: is it fully on? Try again in a minute");
             return;
         }
@@ -286,9 +296,16 @@ public class SettingsActivity extends Activity {
                     }
                 });
                 break;
+            case "sky":
+                if (f.id == null) {
+                    toast("Couldn't identify this Sky box: is it on? Try again in a minute");
+                    return;
+                }
+                saveTv(Tvs.sky(f.ip, f.id), scan, "Added the Sky box. Bind it to its TV: tap the TV in this list");
+                break;
             default: // firetv
                 if (f.id != null) {
-                    saveTv(Tvs.stick(f.ip, f.id), scan, "Added the FireStick");
+                    saveTv(Tvs.stick(f.ip, f.id), scan, "Added the FireStick. Bind it to its TV: tap the TV in this list");
                     return;
                 }
                 toast("On the TV: tick \"Always allow\", then Allow. If nothing shows, turn on ADB debugging "
@@ -297,7 +314,7 @@ public class SettingsActivity extends Activity {
                     Adb a = new Adb(f.ip, 5555, cfg.adbKey());
                     try {
                         String serial = a.shell("getprop ro.serialno", 5000).trim();
-                        saveTv(Tvs.stick(f.ip, serial.isEmpty() ? f.ip : serial), scan, "Added the FireStick");
+                        saveTv(Tvs.stick(f.ip, serial.isEmpty() ? f.ip : serial), scan, "Added the FireStick. Bind it to its TV: tap the TV in this list");
                     } catch (IOException e) {
                         toast("The FireStick didn't allow it: " + e.getMessage());
                     } finally {
@@ -319,8 +336,9 @@ public class SettingsActivity extends Activity {
 
     private void saveTv(Tvs.Saved t, java.util.List<Discovery.TvFound> scan, String done) {
         java.util.List<Tvs.Saved> list = cfg.saved();
-        Tvs.add(list, t, scan);
+        boolean added = Tvs.add(list, t);
         cfg.save(list);
+        if (!added) done = "Already saved: updated";
         cfg.foundTvs(scan); // makes it the TV in use if it's the one here
         toast(done);
         runOnUiThread(this::showTvs);

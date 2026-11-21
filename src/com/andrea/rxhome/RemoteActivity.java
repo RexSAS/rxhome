@@ -65,22 +65,24 @@ public class RemoteActivity extends Activity {
         top.addView(power);
         col.addView(top);
 
-        // TV + FireStick: where the arrows, OK, back, home and touchpad go. Volume and power always go to
-        // the TV, apps always to the FireStick.
+        // A TV with a FireStick and/or Sky box bound: which one the arrows, OK, back, home and touchpad
+        // drive, and which buttons show. Volume and power always go to the TV, apps to the FireStick.
         if (tv.showSwitch()) {
-            boolean onTv = tv.inputToTv();
-            TextView toStick = Ui.button(this, "FIRESTICK", !onTv), toTv = Ui.button(this, "TV", onTv);
-            toStick.setContentDescription("Remote controls the FireStick" + (onTv ? "" : ", selected"));
-            toTv.setContentDescription("Remote controls the TV" + (onTv ? ", selected" : ""));
-            View.OnClickListener pick = v -> {
-                Ui.haptic(v);
-                tv.setInputToTv(v == toTv);
-                new Config(this).setInputToTv(v == toTv);
-                recreate(); // redraw with the new choice highlighted
-            };
-            toStick.setOnClickListener(pick);
-            toTv.setOnClickListener(pick);
-            col.addView(row(small(toStick), small(toTv)));
+            java.util.List<View> styles = new java.util.ArrayList<>();
+            for (String m : tv.modes()) {
+                boolean on = m.equals(tv.mode());
+                String label = m.equals("tv") ? "TV" : m.equals("stick") ? "FIRESTICK" : "SKY";
+                TextView b = Ui.button(this, label, on);
+                b.setContentDescription("Remote controls the " + label + (on ? ", selected" : ""));
+                b.setOnClickListener(v -> {
+                    Ui.haptic(v);
+                    tv.setMode(m);
+                    new Config(this).setInput(m);
+                    recreate(); // redraw in the new style
+                });
+                styles.add(small(b));
+            }
+            col.addView(row(styles.toArray(new View[0])));
         }
 
         // The no-look part: a touchpad filling the screen (swipes, taps and shapes, see Gestures).
@@ -103,8 +105,17 @@ public class RemoteActivity extends Activity {
             apps.setEnabled(false);
             apps.setAlpha(0.4f);
         }
-        col.addView(row(small(key("BACK", 4)), small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
-            small(tvButton("MUTE", 164)), apps));
+        if (tv.mode().equals("sky")) {
+            col.addView(row(small(key("BACK", 4)), small(skyButton("CH +", Sky.CHANNEL_UP, Ui.TEXT)),
+                small(skyButton("CH −", Sky.CHANNEL_DOWN, Ui.TEXT)), small(skyButton("i", Sky.INFO, Ui.TEXT)),
+                small(skyButton("REC", Sky.RECORD, Ui.RED)), small(tvButton("MUTE", 164))));
+            col.addView(row(small(skyButton("●", Sky.RED, 0xFFE53935)), small(skyButton("●", Sky.GREEN, 0xFF43A047)),
+                small(skyButton("●", Sky.YELLOW, 0xFFFDD835)), small(skyButton("●", Sky.BLUE, 0xFF1E88E5)),
+                small(key("◀◀", 89)), small(key("▶▶", 90))));
+        } else {
+            col.addView(row(small(key("BACK", 4)), small(key("MENU", 82)), small(key("◀◀", 89)), small(key("▶▶", 90)),
+                small(tvButton("MUTE", 164)), apps));
+        }
 
         setContentView(col);
     }
@@ -116,6 +127,19 @@ public class RemoteActivity extends Activity {
         b.setOnClickListener(v -> {
             Ui.haptic(v);
             send(() -> tv.volumeKey(key));
+        });
+        return b;
+    }
+
+    /** A Sky-only key (channels, colours, record), by its Sky code. */
+    private TextView skyButton(String label, int code, int color) {
+        TextView b = Ui.button(this, label, false);
+        b.setTextColor(color);
+        String[] names = {"red", "green", "yellow", "blue"};
+        b.setContentDescription(code >= Sky.RED && code <= Sky.BLUE ? names[code - Sky.RED] + " button" : label);
+        b.setOnClickListener(v -> {
+            Ui.haptic(v);
+            send(() -> tv.skyKey(code));
         });
         return b;
     }

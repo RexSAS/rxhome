@@ -121,9 +121,9 @@ public class SamsungLegacyTest {
         }
 
         // Its id: the uuid in the answer to a UPnP search for its remote-control receiver.
-        assert SamsungLegacy.parseUuid("HTTP/1.1 200 OK\r\nUSN: uuid:0b532b81-00be-1000-9e19-5056bf18d8bd::urn:samsung.com:"
+        assert Discovery.parseUuid("HTTP/1.1 200 OK\r\nUSN: uuid:0b532b81-00be-1000-9e19-5056bf18d8bd::urn:samsung.com:"
             + "device:RemoteControlReceiver:1\r\n\r\n").equals("0b532b81-00be-1000-9e19-5056bf18d8bd");
-        assert SamsungLegacy.parseUuid("HTTP/1.1 200 OK\r\n\r\n") == null;
+        assert Discovery.parseUuid("HTTP/1.1 200 OK\r\n\r\n") == null;
 
         // Live (RXHOME_SAMSUNG_LEGACY=ip): the real TV's id, read-only (no prompt on the TV).
         String ip = System.getenv("RXHOME_SAMSUNG_LEGACY");

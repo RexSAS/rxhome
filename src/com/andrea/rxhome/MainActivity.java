@@ -432,6 +432,10 @@ public class MainActivity extends Activity {
             buttons.addView(remote, lp);
             buttons.addView(apps, new LinearLayout.LayoutParams(0, -2, 1));
             tile.addView(buttons);
+            if (!tv().can("apps")) { // e.g. a Sky box alone, or a TV that can't list apps: greyed, not a dead button
+                apps.setEnabled(false);
+                apps.setAlpha(0.4f);
+            }
         }
 
         Tv tv() {
@@ -445,9 +449,10 @@ public class MainActivity extends Activity {
         }
 
         void show(State s) {
-            boolean paired = tv().hasScreen(); // then the state is the TV's own, else the FireStick's
-            Ui.setText(status, s == State.ON ? (paired ? "On" : "On · FireStick")
-                : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);
+            Tv tv = tv(); // a TV's state is its own; on its own, a FireStick's or Sky box's
+            String who = tv.hasScreen() ? "" : tv.hasStick() ? " · FireStick" : " · Sky";
+            Ui.setText(status, s == State.ON ? "On" + who
+                : s == State.OFF ? (tv.hasScreen() ? "Off" : "Standby" + who) : AWAY);
             status.setTextColor(s == State.ON ? Ui.GREEN : s == State.OFF ? Ui.RED : Ui.DIM);
             ring.set(s == State.ON ? StatusRing.ON : s == State.OFF ? StatusRing.OFF : StatusRing.UNKNOWN);
             Ui.reachable(tile, s != State.UNREACHABLE);

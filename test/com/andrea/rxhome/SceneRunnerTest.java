@@ -37,7 +37,7 @@ public class SceneRunnerTest {
     }
 
     static class FakeTv extends Tv {
-        FakeTv() { super(null, null, false); }
+        FakeTv() { super(null, null, null, ""); }
         @Override State state() { return stick; }
         @Override State tvState(State s) { return tvPower; }
         @Override void wake() { log.add("tv wake"); }

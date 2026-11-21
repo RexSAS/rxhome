@@ -4,9 +4,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -203,43 +200,9 @@ class SamsungLegacy implements Screen {
         return Base64.getEncoder().encode(s.getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * The TV's lasting id: the uuid it gives when asked directly (UPnP search sent to it, not to everyone)
-     * for its remote-control receiver. Null if it doesn't answer.
-     */
+    /** The TV's lasting id: the uuid of its remote-control receiver (asked directly, see Discovery). */
     static String uuid(String ip) {
-        byte[] m = ("M-SEARCH * HTTP/1.1\r\nHOST: " + host(ip) + ":1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n"
-            + "ST: urn:samsung.com:device:RemoteControlReceiver:1\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
-        try (DatagramSocket s = new DatagramSocket()) {
-            s.setSoTimeout(1500);
-            for (int attempt = 0; attempt < 2; attempt++) { // UDP: one retry
-                s.send(new DatagramPacket(m, m.length, InetAddress.getByName(host(ip)), 1900));
-                try {
-                    byte[] buf = new byte[2048];
-                    DatagramPacket p = new DatagramPacket(buf, buf.length);
-                    s.receive(p);
-                    String u = parseUuid(new String(p.getData(), 0, p.getLength(), StandardCharsets.UTF_8));
-                    if (u != null) return u;
-                } catch (java.net.SocketTimeoutException e) {
-                    // try again
-                }
-            }
-        } catch (IOException e) {
-            // no answer
-        }
-        return null;
-    }
-
-    static String parseUuid(String response) {
-        for (String line : response.split("\r?\n")) {
-            int c = line.indexOf(':');
-            if (c < 0 || !line.substring(0, c).trim().equalsIgnoreCase("usn")) continue;
-            String v = line.substring(c + 1).trim();
-            if (!v.toLowerCase(java.util.Locale.ROOT).startsWith("uuid:")) return null;
-            int end = v.indexOf("::");
-            return v.substring(5, end < 0 ? v.length() : end);
-        }
-        return null;
+        return Discovery.upnpUuid(host(ip), "urn:samsung.com:device:RemoteControlReceiver:1");
     }
 
     private static String host(String ip) {
