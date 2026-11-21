@@ -54,8 +54,8 @@ public class DiscoveryTest {
         // Live (RXHOME_SCAN set): the real network.
         if (System.getenv("RXHOME_SCAN") != null && priv.exists()) {
             Discovery.Found f = Discovery.find("192.168.1.57", AdbTest.pem(priv));
-            System.out.println("  live: server=" + f.server + " stick=" + f.stick + " tv=" + f.tv);
-            assert "http://192.168.1.166:8096".equals(f.server) && "192.168.1.49".equals(f.stick);
+            System.out.println("  live: server=" + f.server);
+            assert "http://192.168.1.166:8096".equals(f.server);
         }
     }
 

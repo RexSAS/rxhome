@@ -14,6 +14,8 @@ final class Tvs {
 
     /** brand: samsung | lg | philips | none (a FireStick alone). auth: Samsung token / LG client-key / Philips user. */
     static final class Saved {
+        // uid: rxhome's own key for this entry (which TV is active, the remote switch), never changes.
+        String uid = java.util.UUID.randomUUID().toString();
         String id = "", name = "", brand = "none", ip = "", mac = "", auth = "", pass = "", pin = "", stickIp = "", stickId = "";
         boolean inputToTv;
 
@@ -37,6 +39,7 @@ final class Tvs {
                 for (int f = 0; f < FIELDS.length; f++) v[f] = o.optString(FIELDS[f], "");
                 set(s, v);
                 s.inputToTv = o.optBoolean("inputToTv", false);
+                if (!o.optString("uid").isEmpty()) s.uid = o.optString("uid");
                 out.add(s);
             }
         } catch (JSONException e) {
@@ -53,6 +56,7 @@ final class Tvs {
                 String[] v = get(s);
                 for (int f = 0; f < FIELDS.length; f++) o.put(FIELDS[f], v[f]);
                 o.put("inputToTv", s.inputToTv);
+                o.put("uid", s.uid);
                 a.put(o);
             }
         } catch (JSONException e) {
@@ -63,32 +67,40 @@ final class Tvs {
 
     /**
      * The saved TVs on this Wi-Fi now: the TV or its FireStick found by id (IPs updated in place). An entry
-     * from the old settings has no ids yet: it adopts those of what answers at its old IPs, once.
+     * from the old settings has no ids yet: it adopts what answers at its old IP, else the only one of its kind here.
      */
     static List<Saved> match(List<Saved> saved, List<Discovery.TvFound> found) {
         List<Saved> out = new ArrayList<>();
         for (Saved s : saved) {
+            if (s.hasStick() && s.stickId.isEmpty()) s.stickId = adopt(found, "firetv", s.stickIp);
+            if (!s.brand.equals("none") && s.id.isEmpty()) s.id = adopt(found, s.brand, s.ip);
             boolean here = false;
             for (Discovery.TvFound f : found) {
                 if (f.id == null) continue;
-                if (f.brand.equals("firetv")) {
-                    if (!s.hasStick()) continue;
-                    if (s.stickId.isEmpty() && f.ip.equals(s.stickIp)) s.stickId = f.id;
-                    if (f.id.equals(s.stickId)) {
-                        s.stickIp = f.ip;
-                        here = true;
-                    }
-                } else if (f.brand.equals(s.brand)) {
-                    if (s.id.isEmpty() && f.ip.equals(s.ip)) s.id = f.id;
-                    if (f.id.equals(s.id)) {
-                        s.ip = f.ip;
-                        here = true;
-                    }
+                if (f.brand.equals("firetv") && s.hasStick() && f.id.equals(s.stickId)) {
+                    s.stickIp = f.ip;
+                    here = true;
+                } else if (f.brand.equals(s.brand) && f.id.equals(s.id)) {
+                    s.ip = f.ip;
+                    here = true;
                 }
             }
             if (here) out.add(s);
         }
         return out;
+    }
+
+    /** For an entry without an id yet: what answers at its old IP, else the only one of that brand here; "" if unsure. */
+    private static String adopt(List<Discovery.TvFound> found, String brand, String ip) {
+        String only = null;
+        int n = 0;
+        for (Discovery.TvFound f : found) {
+            if (!f.brand.equals(brand) || f.id == null) continue;
+            if (f.ip.equals(ip)) return f.id;
+            only = f.id;
+            n++;
+        }
+        return n == 1 ? only : "";
     }
 
     /** The settings before multi-TV: the FireStick, plus the Philips if it was paired. */

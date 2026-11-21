@@ -396,7 +396,7 @@ public class MainActivity extends Activity {
     }
 
     private void showTv(State s, boolean fresh) {
-        boolean paired = cfg.philips() != null; // then the state is the TV's own, else the FireStick's
+        boolean paired = cfg.tv().hasScreen(); // then the state is the TV's own, else the FireStick's
         Ui.setText(tvStatus, s == State.ON ? (paired ? "On" : "On · FireStick")
             : s == State.OFF ? (paired ? "Off" : "Standby · FireStick") : AWAY);
         tvStatus.setTextColor(s == State.ON ? Ui.GREEN : s == State.OFF ? Ui.RED : Ui.DIM);
@@ -408,7 +408,7 @@ public class MainActivity extends Activity {
         Ui.haptic(v);
         Ui.burst(v);
         tvStatus.setText("…");
-        FireTv tv = cfg.tv();
+        Tv tv = cfg.tv();
         io.execute(() -> {
             try {
                 tv.togglePower(tv.state());
@@ -753,7 +753,7 @@ public class MainActivity extends Activity {
             String stats = Metrics.fetch(metricsUrl(server));
             ui(() -> { if (gen == generation && statsChecks.current(mid)) showStats(stats, true); });
         });
-        FireTv tv = cfg.tv();
+        Tv tv = cfg.tv();
         tv.onKeyPrompt(() -> ui(() -> {
             Ui.reachable(tvTile, true);
             tvStatus.setText("On the TV: tick \"Always allow\", then Allow");
@@ -798,7 +798,7 @@ public class MainActivity extends Activity {
             State server = genServer, stick = genStick;
             io.execute(() -> {
                 String me = Discovery.wifiIp();
-                if (me != null && cfg.found(Discovery.find(me, cfg.adbKey()))) {
+                if (me != null && (cfg.found(Discovery.find(me, cfg.adbKey())) | movedTv(me))) {
                     ui(this::refresh);
                 } else {
                     ui(() -> maybeVpn(server, stick));
@@ -807,6 +807,16 @@ public class MainActivity extends Activity {
             return;
         }
         maybeVpn(genServer, genStick);
+    }
+
+    /** Scans for saved TVs; true if the active one moved or another saved one is the one here. */
+    private boolean movedTv(String me) {
+        String before = Tvs.format(cfg.saved()) + cfg.get(Config.TV_ACTIVE);
+        java.util.List<Discovery.TvFound> found = Discovery.findTvs(me, cfg.adbKey());
+        StringBuilder seen = new StringBuilder();
+        for (Discovery.TvFound f : found) seen.append(' ').append(f.brand).append('@').append(f.ip).append(f.id == null ? "(untrusted)" : "");
+        System.err.println("rxhome-tv: scan found" + seen + "; saved here: " + cfg.foundTvs(found).size());
+        return !before.equals(Tvs.format(cfg.saved()) + cfg.get(Config.TV_ACTIVE));
     }
 
     /** Away from home (server and FireStick both silent): switch on the "rxfilms" WireGuard tunnel. */

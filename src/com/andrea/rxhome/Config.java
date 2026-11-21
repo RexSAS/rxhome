@@ -19,16 +19,15 @@ final class Config {
     static {
         DEFAULTS.put(SERVER, "http://192.168.1.166:8096");
         DEFAULTS.put(SERVER_PUBLIC, "https://rxfilms.rxsas.it");
-        DEFAULTS.put(FIRETV, "192.168.1.49");
-        DEFAULTS.put(PHILIPS_IP, "192.168.1.221");
-        DEFAULTS.put(PHILIPS_MAC, "d4:0a:dc:d6:c7:44"); // seen on the LAN 2026-11-17; pairing overwrites it if the TV reports one
         DEFAULTS.put(SCENES, Scenes.DEFAULT);
     }
 
-    // One FireTv per process, shared by the home and remote screens, so its ADB connections and the
-    // running key helper survive moving between screens.
-    private static FireTv tv;
-    private static String tvHost;
+    // One Tv per process, shared by the home and remote screens, so its ADB connections and the running
+    // key helper survive moving between screens. Rebuilt when the active TV or its settings change.
+    private static Tv tv;
+    private static String tvKey;
+
+    static final String TVS = "tvs", TV_ACTIVE = "tv_active", TVS_MIGRATED = "tvs_migrated";
 
     final SharedPreferences prefs;
     private final Context ctx;
@@ -47,18 +46,90 @@ final class Config {
         prefs.edit().putString(key, value).apply();
     }
 
-    synchronized FireTv tv() {
-        String host = get(FIRETV);
-        if (tv == null || !host.equals(tvHost)) {
-            if (tv != null) tv.close();
-            KeyPair key = adbKey();
-            Adb keysAdb = new Adb(host, 5555, key);
-            keysAdb.authWaitMs = 1500; // only the main connection holds the line for the TV's prompt
-            tv = new FireTv(new Adb(host, 5555, key), keysAdb, helperDex());
-            tvHost = host;
+    /** Every TV paired so far (the old single FireStick + Philips settings become the first, once). */
+    synchronized java.util.List<Tvs.Saved> saved() {
+        // The old app always had a FireStick (its default address if never scanned), so it always comes over;
+        // the marker (not the list) says it's done, so removing every TV later doesn't bring it back.
+        if (!prefs.contains(TVS_MIGRATED)) {
+            java.util.List<Tvs.Saved> list = Tvs.parse(prefs.getString(TVS, "[]"));
+            if (list.isEmpty()) {
+                list.add(Tvs.migrate(prefs.getString(FIRETV, "192.168.1.49"), prefs.getString(PHILIPS_IP, "192.168.1.221"),
+                    prefs.getString(PHILIPS_USER, ""), prefs.getString(PHILIPS_PASS, ""), prefs.getString(PHILIPS_CERT, ""),
+                    prefs.getString(PHILIPS_MAC, "d4:0a:dc:d6:c7:44")));
+            }
+            SharedPreferences.Editor e = prefs.edit().putString(TVS, Tvs.format(list)).putString(TVS_MIGRATED, "1");
+            for (String k : new String[] {FIRETV, PHILIPS_IP, PHILIPS_USER, PHILIPS_PASS, PHILIPS_CERT, PHILIPS_MAC}) e.remove(k);
+            e.apply();
+            return list;
         }
-        tv.setPhilips(philips(), get(PHILIPS_MAC));
+        return Tvs.parse(prefs.getString(TVS, "[]"));
+    }
+
+    synchronized void save(java.util.List<Tvs.Saved> list) {
+        put(TVS, Tvs.format(list));
+    }
+
+    /** The TV in use: the one picked last, else the first saved; null if none. */
+    synchronized Tvs.Saved active() {
+        java.util.List<Tvs.Saved> list = saved();
+        String uid = get(TV_ACTIVE);
+        for (Tvs.Saved s : list) if (s.uid.equals(uid)) return s;
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    void setActive(String uid) {
+        put(TV_ACTIVE, uid);
+    }
+
+    /** The remote's FireStick | TV switch, kept per TV. */
+    synchronized void setInputToTv(boolean toTv) {
+        Tvs.Saved a = active();
+        if (a == null) return;
+        java.util.List<Tvs.Saved> list = saved();
+        for (Tvs.Saved s : list) if (s.uid.equals(a.uid)) s.inputToTv = toTv;
+        save(list);
+    }
+
+    /**
+     * After a scan: saved TVs found here get their new IPs; if the active one isn't here but exactly one
+     * saved TV is, that one becomes active. Returns the saved TVs found here.
+     */
+    synchronized java.util.List<Tvs.Saved> foundTvs(java.util.List<Discovery.TvFound> found) {
+        java.util.List<Tvs.Saved> list = saved();
+        java.util.List<Tvs.Saved> here = Tvs.match(list, found);
+        save(list);
+        Tvs.Saved a = active();
+        boolean activeHere = false;
+        for (Tvs.Saved s : here) activeHere |= a != null && s.uid.equals(a.uid);
+        if (!activeHere && here.size() == 1) setActive(here.get(0).uid);
+        return here;
+    }
+
+    synchronized Tv tv() {
+        Tvs.Saved a = active();
+        String key = a == null ? "" : Tvs.format(java.util.Collections.singletonList(a));
+        if (tv == null || !key.equals(tvKey)) {
+            if (tv != null) tv.close();
+            tv = a == null ? new Tv(null, null, false) : new Tv(screen(a), a.hasStick() ? stick(a.stickIp) : null, a.inputToTv);
+            tvKey = key;
+        }
         return tv;
+    }
+
+    private static Screen screen(Tvs.Saved s) {
+        switch (s.brand) {
+            case "samsung": return new Samsung(s.ip, s.auth, s.pin, s.mac);
+            case "lg": return new Lg(s.ip, s.auth, s.pin, s.mac);
+            case "philips": return new Philips(s.ip, s.auth, s.pass, s.pin, s.mac);
+            default: return null;
+        }
+    }
+
+    private FireTv stick(String host) {
+        KeyPair key = adbKey();
+        Adb keysAdb = new Adb(host, 5555, key);
+        keysAdb.authWaitMs = 1500; // only the main connection holds the line for the TV's prompt
+        return new FireTv(new Adb(host, 5555, key), keysAdb, helperDex());
     }
 
     /** The key helper built by keys.sh and packed into assets by build.sh; null if missing. */
@@ -73,32 +144,29 @@ final class Config {
         }
     }
 
-    /** Saves what a Wi-Fi scan found (null = not found, keep the old one); true if anything moved. */
+    /** Saves where the server was found (null = not found, keep the old one); true if it moved. */
     boolean found(Discovery.Found f) {
-        boolean changed = false;
-        String[][] pairs = {{SERVER, f.server}, {FIRETV, f.stick}, {PHILIPS_IP, f.tv}};
-        for (String[] p : pairs) {
-            if (p[1] != null && !p[1].equals(get(p[0]))) {
-                put(p[0], p[1]);
-                changed = true;
-            }
-        }
-        return changed;
+        if (f.server == null || f.server.equals(get(SERVER))) return false;
+        put(SERVER, f.server);
+        return true;
     }
 
     /** Devices that are on whenever home is reachable (not the server: it may be off), as "host:port". */
     java.util.List<String> homeDevices() {
         java.util.List<String> out = new java.util.ArrayList<>();
-        out.add(get(FIRETV) + ":5555");
-        out.add(get(PHILIPS_IP) + ":1925");
+        Tvs.Saved a = active();
+        if (a != null && a.hasStick()) out.add(a.stickIp + ":5555");
+        if (a != null && !a.ip.isEmpty()) {
+            int port = a.brand.equals("samsung") ? 8001 : a.brand.equals("lg") ? 3001 : 1925;
+            out.add(a.ip + ":" + port);
+        }
         for (String ip : Scenes.lights(get(LIGHTS)).values()) out.add(ip + ":80");
         return out;
     }
 
-    /** For Settings: where things were found. */
+    /** For Settings: what was found. */
     String foundLine() {
-        return "Found on this Wi-Fi: server " + get(SERVER).replace("http://", "") + " · FireStick " + get(FIRETV)
-            + " · TV " + get(PHILIPS_IP) + ". Found again automatically if they move.";
+        return "Server found on this Wi-Fi at " + get(SERVER).replace("http://", "") + ". Found again automatically if it moves.";
     }
 
     static final String JF_TOKEN = "jellyfin_token", JF_USER = "jellyfin_user", JF_DEVICE = "jellyfin_device";
@@ -114,12 +182,6 @@ final class Config {
         String id = get(JF_DEVICE);
         if (id.isEmpty()) put(JF_DEVICE, id = java.util.UUID.randomUUID().toString());
         return id;
-    }
-
-    /** The Philips TV's own API; null until paired in Settings. */
-    Philips philips() {
-        return get(PHILIPS_USER).isEmpty() ? null
-            : new Philips(get(PHILIPS_IP), get(PHILIPS_USER), get(PHILIPS_PASS), get(PHILIPS_CERT));
     }
 
     /** Null until a token and secret are set. */
