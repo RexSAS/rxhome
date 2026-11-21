@@ -29,6 +29,19 @@ final class Discovery {
         String server, stick, tv;
     }
 
+    /** A TV (or FireStick) on this Wi-Fi. brand: samsung | lg | philips | firetv. id null = can't tell yet. */
+    static final class TvFound {
+        final String brand, ip, id, name, mac;
+
+        TvFound(String brand, String ip, String id, String name, String mac) {
+            this.brand = brand;
+            this.ip = ip;
+            this.id = id;
+            this.name = name;
+            this.mac = mac;
+        }
+    }
+
     private static final int CONNECT_MS = 350;
 
     private Discovery() {}
@@ -180,6 +193,74 @@ final class Discovery {
             pool.shutdownNow();
         }
         return f;
+    }
+
+    /**
+     * Every TV and FireStick on this Wi-Fi, each with a lasting id: Samsung's own device id, else the UPnP
+     * uuid, else its certificate's pin; a FireStick's serial (only if it already trusts our key: the scan
+     * never offers it, so nothing gets a prompt).
+     */
+    static List<TvFound> findTvs(String myIp, KeyPair key) {
+        List<String> hosts = subnet(myIp);
+        List<TvFound> out = new java.util.ArrayList<>();
+        ExecutorService pool = Executors.newFixedThreadPool(5);
+        try {
+            Future<List<Ssdp.Hit>> ssdp = pool.submit(() -> Ssdp.search(2500));
+            Future<List<String>> samsung = pool.submit(() -> open(hosts, 8001, CONNECT_MS));
+            Future<List<String>> lg = pool.submit(() -> open(hosts, 3001, CONNECT_MS));
+            Future<List<String>> philips = pool.submit(() -> open(hosts, 1925, CONNECT_MS));
+            Future<List<String>> adb = pool.submit(() -> open(hosts, 5555, CONNECT_MS));
+            List<Ssdp.Hit> hits = ssdp.get();
+            java.util.Set<String> taken = new java.util.HashSet<>();
+            for (String h : samsung.get()) {
+                String[] info = Samsung.info(h);
+                if (info != null && taken.add(h)) out.add(new TvFound("samsung", h, info[0], info[1], info[2]));
+            }
+            for (String h : lg.get()) {
+                if (taken.contains(h)) continue;
+                taken.add(h);
+                out.add(new TvFound("lg", h, identity(hits, h, 3001), "LG TV", null));
+            }
+            for (String h : philips.get()) {
+                if (taken.contains(h) || !isPhilips(h)) continue;
+                taken.add(h);
+                String name = "Philips TV";
+                try {
+                    name = new org.json.JSONObject(fetch("http://" + h + ":1925/6/system")).optString("name", name);
+                } catch (org.json.JSONException e) {
+                    // keep the default
+                }
+                out.add(new TvFound("philips", h, identity(hits, h, 1926), name, null));
+            }
+            for (String h : adb.get()) {
+                Adb a = new Adb(h, 5555, key);
+                a.offerKey = false;
+                try {
+                    String serial = a.shell("getprop ro.serialno", 2000).trim();
+                    out.add(new TvFound("firetv", h, serial.isEmpty() ? null : serial, "FireStick", null));
+                } catch (IOException e) {
+                    out.add(new TvFound("firetv", h, null, "FireStick (not paired)", null));
+                } finally {
+                    a.close();
+                }
+            }
+        } catch (Exception e) {
+            // Whatever was found so far.
+        } finally {
+            pool.shutdownNow();
+        }
+        return out;
+    }
+
+    /** UPnP uuid, else the pin of the certificate on tlsPort; null if neither. */
+    private static String identity(List<Ssdp.Hit> hits, String ip, int tlsPort) {
+        String u = Ssdp.rootUuid(hits, ip);
+        if (u != null) return u;
+        try {
+            return "pin:" + Pin.capture(ip, tlsPort);
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     private static String fetch(String url) {
