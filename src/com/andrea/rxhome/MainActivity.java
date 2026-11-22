@@ -81,6 +81,14 @@ public class MainActivity extends Activity {
             }
         }
         refresh();
+        onScreen = this;
+        maybeCheckUpdate();
+    }
+
+    @Override
+    protected void onPause() {
+        if (onScreen == this) onScreen = null;
+        super.onPause();
     }
 
     @Override
@@ -957,5 +965,72 @@ public class MainActivity extends Activity {
 
     private void toast(String s) {
         Toast.makeText(this, s, Toast.LENGTH_LONG).show();
+    }
+
+    // --- Updates (see Updater), as in rxVision ---
+
+    private static final long UPDATE_CHECK_MS = 60 * 60_000, UPDATE_LATER_MS = 12 * 60 * 60_000;
+    private static MainActivity onScreen;
+    private long lastUpdateCheck;
+    private AlertDialog updating; // the progress while an update downloads and installs
+
+    /** At most hourly, when the app shows: asks if GitHub has a newer version (not again for a while after "Later"). */
+    private void maybeCheckUpdate() {
+        if (updating != null && !Updater.busy) hideUpdating(); // back from the system's install screen without installing
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (Updater.busy || (lastUpdateCheck != 0 && now - lastUpdateCheck < UPDATE_CHECK_MS)) return;
+        lastUpdateCheck = now;
+        io.execute(() -> {
+            try {
+                Updater.Release r = Updater.newer(this);
+                if (r == null) return;
+                if (r.code == cfg.prefs.getInt("updateLater", 0)
+                    && System.currentTimeMillis() - cfg.prefs.getLong("updateLaterAt", 0) < UPDATE_LATER_MS) return;
+                runOnUiThread(() -> { if (onScreen == this && !Updater.busy) askUpdate(r); });
+            } catch (IOException e) {
+                android.util.Log.w("rxhome", "update check", e);
+            }
+        });
+    }
+
+    private void askUpdate(Updater.Release r) {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Update available")
+            .setMessage("A new version of rxhome (" + r.code + ") is ready. Update now?")
+            .setPositiveButton("Update", (x, w) -> startUpdate(r))
+            .setNegativeButton("Later", (x, w) -> cfg.prefs.edit().putInt("updateLater", r.code)
+                .putLong("updateLaterAt", System.currentTimeMillis()).apply())
+            .show();
+    }
+
+    private void startUpdate(Updater.Release r) {
+        Updater.busy = true;
+        updating = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Updating rxhome").setMessage("Downloading…").setCancelable(false).show();
+        io.execute(() -> {
+            try {
+                Updater.install(this, r, pct -> runOnUiThread(() -> {
+                    if (updating != null) updating.setMessage(pct < 100 ? "Downloading… " + pct + "%" : "Installing…");
+                }));
+            } catch (IOException | RuntimeException e) {
+                Updater.busy = false;
+                runOnUiThread(() -> {
+                    hideUpdating();
+                    Toast.makeText(this, "Update failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    /** Updater: the install didn't happen (its message is already toasted). */
+    static void updateEnded() {
+        MainActivity a = onScreen;
+        if (a != null) a.hideUpdating();
+    }
+
+    private void hideUpdating() {
+        if (updating == null) return;
+        updating.dismiss();
+        updating = null;
     }
 }

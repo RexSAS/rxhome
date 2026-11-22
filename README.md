@@ -24,6 +24,17 @@ Remote keys go through a tiny helper (`tv/…/Keys.java`, built by `keys.sh` and
 
 `build.sh` creates `signing.keystore` on first run; keep it (git-ignored): updates must be signed with the same key.
 
+## Updates
+
+rxhome updates itself from this repo's GitHub releases, like rxVision. To ship a new version, commit, then:
+
+```sh
+./release.sh        # builds, pushes, creates release v<commit count> with the APK
+```
+
+When rxhome next opens (it checks at most once an hour) it asks to update, shows the download progress, then
+Android's install confirmation (the first time, Android asks to allow installs from rxhome).
+
 ## First run
 
 Open ⚙ Settings:

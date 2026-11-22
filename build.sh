@@ -16,7 +16,10 @@ rm -rf build/apk
 mkdir -p build/apk/gen build/apk/classes build/apk/dex
 
 "$BT/aapt2" compile --dir res -o build/apk/res.zip
+# Version = commits so far: each new commit is a newer version for the updater (see release.sh).
+VERSION=$(git rev-list --count HEAD)
 "$BT/aapt2" link -I "$JAR" --manifest AndroidManifest.xml --java build/apk/gen \
+    --version-code "$VERSION" --version-name "$VERSION" --replace-version \
     --min-sdk-version 26 --target-sdk-version 30 -A assets -o build/apk/unsigned.apk build/apk/res.zip
 
 javac --release 8 -classpath "$JAR" -Xlint:-options -d build/apk/classes \

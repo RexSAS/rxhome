@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.andrea.rxhome"
-    android:versionCode="2"
-    android:versionName="1.1">
+    android:versionCode="1"
+    android:versionName="1.0">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Switching on the WireGuard tunnel home when away (see Vpn). -->
@@ -12,6 +12,8 @@
     <!-- TunnelWatch: knows which app is in front, to switch the tunnel off when rxhome and Jellyfin are left. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <!-- Updates from GitHub releases (see Updater). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Android 11+ only shows apps declared here: the "Open Jellyfin" button. -->
     <queries>
@@ -46,5 +48,11 @@
         <activity android:name=".SettingsActivity" android:exported="false"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize" />
+        <receiver android:name=".Updater$Status" android:exported="false" />
+        <receiver android:name=".Updater$Replaced" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
