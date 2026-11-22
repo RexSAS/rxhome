@@ -30,6 +30,7 @@ public class RemoteActivity extends Activity {
     private final AtomicInteger queued = new AtomicInteger();
     private Runnable repeater;
     private Tv tv;
+    private TextView stickOn;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -61,6 +62,16 @@ public class RemoteActivity extends Activity {
         TextView source = small(tvButton("SOURCE", 178)); // the TV's inputs, whatever the switch says
         LinearLayout.LayoutParams srcLp = new LinearLayout.LayoutParams(-2, -2);
         srcLp.rightMargin = Ui.dp(this, 12);
+        // Shown only while the FireStick is in standby (checked on resume): wakes the stick alone.
+        stickOn = small(Ui.button(this, "FIRESTICK ON", true));
+        stickOn.setContentDescription("Turn the FireStick on");
+        stickOn.setVisibility(View.GONE);
+        stickOn.setOnClickListener(v -> {
+            Ui.haptic(v);
+            v.setVisibility(View.GONE);
+            send(tv::wakeStick);
+        });
+        top.addView(stickOn, srcLp);
         top.addView(source, srcLp);
         top.addView(power);
         col.addView(top);
@@ -165,6 +176,16 @@ public class RemoteActivity extends Activity {
     public boolean onKeyUp(int keyCode, android.view.KeyEvent event) {
         if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) return true;
         return super.onKeyUp(keyCode, event);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!tv.hasStick()) return;
+        io.execute(() -> {
+            boolean standby = tv.state() == State.OFF; // with a stick, state() is the stick's own
+            runOnUiThread(() -> stickOn.setVisibility(standby ? View.VISIBLE : View.GONE));
+        });
     }
 
     @Override

@@ -61,6 +61,11 @@ class Tv {
         return stick != null;
     }
 
+    /** Only the stick out of standby, the TV left as it is. */
+    void wakeStick() throws IOException {
+        stick.wake();
+    }
+
     /** The remote's style buttons: only when there's something besides the TV. */
     boolean showSwitch() {
         return modes().size() > 1;
