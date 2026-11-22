@@ -7,5 +7,5 @@ cd "$(dirname "$0")"
 ./build.sh
 VERSION=$(git rev-list --count HEAD)
 git push origin HEAD
-gh release create "v$VERSION" build/rxhome.apk --title "v$VERSION" --notes "$(git log -1 --format=%s)"
+gh release create "v$VERSION" build/rxhome.apk --target "$(git rev-parse HEAD)" --title "v$VERSION" --notes "$(git log -1 --format=%s)"
 echo "Released v$VERSION: the phone asks to update next time rxhome opens (checks at most hourly)."
