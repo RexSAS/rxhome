@@ -2,7 +2,7 @@ package com.andrea.rxhome;
 
 public class JellyfinTest {
     public static void main(String[] a) throws Exception {
-        // Items of /UserItems/Resume or /Shows/NextUp, labelled like rxhome-tv's rows.
+        // Items of /UserItems/Resume or /Shows/NextUp, labelled like rxVision's rows.
         String film = "{\"Items\":[{\"Id\":\"0f3a9b6c1d2e4f5a8b7c6d5e4f3a2b1c\",\"Type\":\"Movie\",\"Name\":\"Dune: Part Two\","
             + "\"ProductionYear\":2024},{\"Id\":\"ffff\",\"Name\":\"Second\"}],\"TotalRecordCount\":2}";
         Jellyfin.Item f = Jellyfin.all(film, "").get(0);
@@ -11,7 +11,7 @@ public class JellyfinTest {
             + "\"SeriesName\":\"Severance\",\"ParentIndexNumber\":2,\"IndexNumber\":5}]}";
         assert Jellyfin.all(ep, "").get(0).label().equals("Severance S2:E5");
 
-        // Every item, each with its picture: an episode's own still, a film's backdrop (as rxhome-tv's rows).
+        // Every item, each with its picture: an episode's own still, a film's backdrop (as rxVision's rows).
         java.util.List<Jellyfin.Item> all = Jellyfin.all(film.replace("\"Name\":\"Second\"", "\"Name\":\"Second\",\"Type\":\"Movie\""),
             "http://192.168.1.166:8096");
         assert all.size() == 2 && all.get(1).title.equals("Second");

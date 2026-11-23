@@ -58,8 +58,6 @@ public class FireTvTest {
         assert FireTv.signalCommand("swap", "Movie night", "Kid's room", 1500).equals(
             "am broadcast -a com.andrea.rxhome.SCENE -p com.andrea.tvlauncher --es event 'swap' --es scene 'Movie night'"
                 + " --ei fade_ms 1500 --es from 'Kid'\\''s room'") : FireTv.signalCommand("swap", "Movie night", "Kid's room", 1500);
-        assert FireTv.parseReveal("I HomeService: reveal abc 1200\nI HomeService: reveal xyz 900\n", "xyz") == 900;
-        assert FireTv.parseReveal("", "xyz") == -1;
 
         // The stick reads it from its CEC log (routing by it: TvTest).
         assert stickWithCec(standby).cecTvOn() == Boolean.FALSE;

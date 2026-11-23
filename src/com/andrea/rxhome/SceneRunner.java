@@ -61,12 +61,6 @@ class SceneRunner {
     /** TVs already told about this run's scene; cued = those holding their picture for it, told "ready" at the end. */
     private final java.util.Set<Tv> told = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     private final java.util.List<Tv> cued = new java.util.ArrayList<>();
-    /** Each cued TV's volume before the scene faded it out, to fade back to with the picture. */
-    private final java.util.Map<Tv, Integer> volumes = new java.util.IdentityHashMap<>();
-    /** Gap between volume steps: about a Philips round trip, so the fade keeps time. */
-    static final int VOLUME_STEP_MS = 150;
-    /** Longest to wait for the launcher's reveal (its own cap is 25 s after the scene signal). */
-    static final int REVEAL_WAIT_MS = 30000;
 
     /** What to tell the TVs this scene uses (FireTv.signal): "start" / "swap" (from = the previous scene) / "off"; null = nothing. */
     SceneRunner signal(String event, String from) {
@@ -132,7 +126,6 @@ class SceneRunner {
         sceneName = scene.name;
         told.clear();
         cued.clear();
-        volumes.clear();
         int done = 0;
         for (String[] s : steps) {
             try {
@@ -141,18 +134,12 @@ class SceneRunner {
                 // Unreachable or refused: counted as not done; the next steps still run.
             }
         }
-        for (Tv t : cued) { // the launcher fades the new picture in once it settles; the sound comes up with it
-            Integer v = volumes.get(t);
-            String id = Long.toString(System.nanoTime(), 36);
+        for (Tv t : cued) { // the launcher fades the new picture (and the TV's sound) in once it settles
             try {
-                t.ready(sceneName, id);
+                t.signal("ready", sceneName, null);
             } catch (IOException | RuntimeException e) {
                 // It reveals by itself after a while.
             }
-            if (v == null) continue;
-            int ms = t.awaitReveal(id, REVEAL_WAIT_MS);
-            if (ms > 0) fadeVolume(t, 0, v, ms);
-            else setVolume(t, v);
         }
         return new int[] {done, scene.steps.size()};
     }
@@ -169,37 +156,7 @@ class SceneRunner {
         } catch (IOException | RuntimeException e) {
             return; // Only a courtesy to the launcher: the scene goes on.
         }
-        int v = tv.volume();
-        if (v > 0) volumes.put(tv, v);
-        if (fade) fadeOut(tv, v);
-        else if (v > 0) setVolume(tv, 0); // from off: silent until the picture comes up
-    }
-
-    /** The sound fades out with the picture (FADE_MS); a TV whose volume can't be read just waits for the picture. */
-    private void fadeOut(Tv tv, int volume) {
-        if (volume > 0) fadeVolume(tv, volume, 0, FADE_MS);
-        else waitMs(FADE_MS);
-    }
-
-    /** Steps the TV's volume from one level to another over about `ms`. */
-    private void fadeVolume(Tv tv, int from, int to, int ms) {
-        int steps = Math.max(1, ms / VOLUME_STEP_MS), sent = from;
-        for (int k = 1; k <= steps; k++) {
-            waitMs(ms / steps);
-            int level = from + (to - from) * k / steps;
-            if (level == sent) continue;
-            if (!setVolume(tv, level)) return;
-            sent = level;
-        }
-    }
-
-    private boolean setVolume(Tv tv, int level) {
-        try {
-            tv.tvVolume(level);
-            return true;
-        } catch (IOException | RuntimeException e) {
-            return false;
-        }
+        if (fade) waitMs(FADE_MS); // the launcher fades picture and sound together
     }
 
     private boolean step(String[] s) throws IOException {
@@ -244,16 +201,13 @@ class SceneRunner {
                         } else {
                             if (signalEvent != null) { // the launcher fades the picture first (tv_off stands in for the scene signal)
                                 told.add(tv);
-                                int volume = -1;
                                 try {
                                     tv.signal("tv_off", sceneName, null);
-                                    volume = tv.volume();
-                                    fadeOut(tv, volume);
+                                    waitMs(FADE_MS);
                                 } catch (IOException | RuntimeException e) {
                                     // No launcher to fade: straight off.
                                 }
                                 tv.sleep();
-                                if (volume > 0) setVolume(tv, volume); // back for next time
                             } else {
                                 tv.sleep();
                             }

@@ -12,7 +12,7 @@ import org.json.JSONObject;
 
 /**
  * Just enough of Jellyfin for the TV shortcuts: Continue watching / Next up with pictures, and a
- * Quick Connect sign-in (as rxhome-tv's launcher does it) to get a token.
+ * Quick Connect sign-in (as rxVision's launcher does it) to get a token.
  */
 final class Jellyfin {
 

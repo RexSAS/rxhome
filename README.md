@@ -11,7 +11,7 @@ Anything it can't reach right now (away from home without WireGuard, device off)
 
 ## Build and install
 
-Plain Android SDK command-line tools, no Gradle (same setup as rxhome-tv):
+Plain Android SDK command-line tools, no Gradle (same setup as rxVision):
 
 ```sh
 ./build.sh                                   # -> build/rxhome.apk
@@ -76,7 +76,6 @@ am broadcast -a com.andrea.rxhome.SCENE -p com.andrea.tvlauncher
   --es scene   <scene name>
   --ei fade_ms 3000
   --es from    <previous scene>        (swap only)
-  --es id      <id>                    (ready only)
 ```
 
-`start`, `swap` and `off` come right before a scene (starting, swapping from another one, or turning off) first changes that TV's picture; rxhome then waits `fade_ms` before changing it, so the launcher can fade to black. `ready` comes once the scene's last step has run: the launcher fades the new picture in when the screen settles and logs `reveal <id> <ms>`, which rxhome follows to bring the TV's volume (paired Philips) back up over the same time; it faded out with the picture. `tv_off` comes just before rxhome switches that TV off: rxhome fades the sound and waits `fade_ms` before sending standby. Without a receiver, scenes still run; the sound just comes back after 30 s.
+`start`, `swap` and `off` come right before a scene (starting, swapping from another one, or turning off) first changes that TV's picture; rxhome then waits `fade_ms` before changing it, so the launcher can fade to black. `ready` comes once the scene's last step has run: the launcher fades the new picture in when the screen settles. `tv_off` comes just before rxhome switches that TV off: rxhome waits `fade_ms` before sending standby. The launcher fades the sound with the picture itself (a gain on the FireStick's output mix). Without a receiver, scenes run as before.

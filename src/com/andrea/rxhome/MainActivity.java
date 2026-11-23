@@ -1281,7 +1281,7 @@ public class MainActivity extends Activity {
         java.util.List<Discovery.TvFound> found = Discovery.findTvs(me, cfg.adbKey());
         StringBuilder seen = new StringBuilder();
         for (Discovery.TvFound f : found) seen.append(' ').append(f.brand).append('@').append(f.ip).append(f.id == null ? "(untrusted)" : "");
-        System.err.println("rxhome-tv: scan found" + seen + "; saved here: " + cfg.foundTvs(found).size());
+        System.err.println("rxhome: TV scan found" + seen + "; saved here: " + cfg.foundTvs(found).size());
         return !before.equals(Tvs.format(cfg.saved()) + cfg.get(Config.TV_ACTIVE));
     }
 

@@ -210,28 +210,10 @@ class Tv {
         screen.mute();
     }
 
-    /** The TV's volume level, or -1 if it can't be read (only a Philips tells it). */
-    int volume() {
-        if (!(screen instanceof Philips)) return -1;
-        try {
-            return Philips.currentVolume(((Philips) screen).get("audio/volume"));
-        } catch (IOException | RuntimeException e) {
-            return -1;
-        }
-    }
-
     // --- the launcher on the FireStick (scenes): nothing to tell without one ---
 
     void signal(String event, String scene, String from) throws IOException {
         if (stick != null) stick.signal(event, scene, from);
-    }
-
-    void ready(String scene, String id) throws IOException {
-        if (stick != null) stick.ready(scene, id);
-    }
-
-    int awaitReveal(String id, int maxMs) {
-        return stick == null ? -1 : stick.awaitReveal(id, maxMs);
     }
 
     // --- apps: the stick, else the TV's own ---
@@ -295,6 +277,6 @@ class Tv {
     }
 
     private static void log(String what, Exception e) {
-        System.err.println("rxhome-tv: " + what + " failed: " + e);
+        System.err.println("rxhome: TV " + what + " failed: " + e);
     }
 }
