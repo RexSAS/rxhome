@@ -45,8 +45,11 @@ public class RemoteActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(0, 0, 0, Ui.dp(this, 8)); // room between SOURCE and the switch below
-        top.addView(Ui.text(this, "Remote", 26, Ui.TEXT, true), new LinearLayout.LayoutParams(0, -2, 1));
+        top.setPadding(0, 0, 0, Ui.dp(this, 8));
+        TextView title = Ui.text(this, "Remote", 26, Ui.TEXT, true);
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END); // the style switch and SOURCE come first
+        top.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         TextView power = Ui.power(this);
         power.setOnClickListener(v -> {
             Ui.haptic(v);
@@ -72,6 +75,7 @@ public class RemoteActivity extends Activity {
             send(tv::wakeStick);
         });
         top.addView(stickOn, srcLp);
+        if (tv.showSwitch()) top.addView(styleSwitch(), srcLp);
         top.addView(source, srcLp);
         top.addView(power);
         col.addView(top);
@@ -79,25 +83,6 @@ public class RemoteActivity extends Activity {
         col.setFocusableInTouchMode(true); // the screen, not the bar, gets focus: no keyboard until the bar is tapped
         col.requestFocus();
 
-        // A TV with a FireStick and/or Sky box bound: which one the arrows, OK, back, home and touchpad
-        // drive, and which buttons show. Volume and power always go to the TV, apps to the FireStick.
-        if (tv.showSwitch()) {
-            java.util.List<View> styles = new java.util.ArrayList<>();
-            for (String m : tv.modes()) {
-                boolean on = m.equals(tv.mode());
-                String label = m.equals("tv") ? "TV" : m.equals("stick") ? "FIRESTICK" : "SKY";
-                TextView b = Ui.button(this, label, on);
-                b.setContentDescription("Remote controls the " + label + (on ? ", selected" : ""));
-                b.setOnClickListener(v -> {
-                    Ui.haptic(v);
-                    tv.setMode(m);
-                    new Config(this).setInput(m);
-                    recreate(); // redraw in the new style
-                });
-                styles.add(small(b));
-            }
-            col.addView(row(styles.toArray(new View[0])));
-        }
 
         // The no-look part: a touchpad filling the screen (swipes, taps and shapes, see Gestures).
         TouchpadView pad = new TouchpadView(this, new Gestures.Out() {
@@ -156,6 +141,47 @@ public class RemoteActivity extends Activity {
             send(() -> tv.skyKey(code));
         });
         return b;
+    }
+
+    /**
+     * A TV with a FireStick and/or Sky box bound: a small segmented switch for which one the arrows, OK,
+     * back, home and touchpad drive (and which buttons show). Volume and power always go to the TV, apps to the FireStick.
+     */
+    private View styleSwitch() {
+        LinearLayout seg = new LinearLayout(this);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(Ui.BUTTON);
+        bg.setCornerRadius(Ui.dp(this, 18));
+        seg.setBackground(bg);
+        int pad = Ui.dp(this, 3);
+        seg.setPadding(pad, pad, pad, pad);
+        for (String m : tv.modes()) {
+            boolean on = m.equals(tv.mode());
+            String label = m.equals("tv") ? "TV" : m.equals("stick") ? "STICK" : "SKY";
+            TextView b = Ui.text(this, label, 11, on ? Ui.TEXT : Ui.DIM, true);
+            b.setGravity(Gravity.CENTER);
+            b.setLetterSpacing(0.06f);
+            b.setPadding(Ui.dp(this, 9), Ui.dp(this, 8), Ui.dp(this, 9), Ui.dp(this, 8));
+            if (on) {
+                android.graphics.drawable.GradientDrawable sel = new android.graphics.drawable.GradientDrawable();
+                sel.setColor(Ui.RED);
+                sel.setCornerRadius(Ui.dp(this, 15));
+                b.setBackground(sel);
+            }
+            String who = m.equals("tv") ? "TV" : m.equals("stick") ? "FireStick" : "Sky box";
+            b.setContentDescription("Remote controls the " + who + (on ? ", selected" : ""));
+            b.setClickable(true);
+            b.setFocusable(true);
+            b.setOnClickListener(v -> {
+                if (on) return;
+                Ui.haptic(v);
+                tv.setMode(m);
+                new Config(this).setInput(m);
+                recreate(); // redraw in the new style
+            });
+            seg.addView(b, new LinearLayout.LayoutParams(-2, -2));
+        }
+        return seg;
     }
 
     private TextView small(TextView b) {
