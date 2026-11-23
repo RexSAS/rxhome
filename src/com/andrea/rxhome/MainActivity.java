@@ -280,7 +280,7 @@ public class MainActivity extends Activity {
         int sid = statusChecks.next(), mid = statsChecks.next();
         io.execute(() -> {
             State st = Server.status(server, pub);
-            String stats = Metrics.fetch(metricsUrl(server));
+            String stats = stats(server, pub);
             ui(() -> {
                 if (statsChecks.current(mid)) showStats(stats, true);
                 if (statusChecks.current(sid)) showServer(st, true);
@@ -351,6 +351,13 @@ public class MainActivity extends Activity {
     }
 
     // shortcut: node_exporter assumed on the Jellyfin LAN host at :9100; make it a setting if it ever moves.
+    /** LAN exporter first; away from home, the same metrics through nginx on the public address (/node-metrics). */
+    static String stats(String server, String pub) {
+        String s = Metrics.fetch(metricsUrl(server));
+        if (s != null || pub == null || pub.isEmpty()) return s;
+        return Metrics.fetch(pub.replaceAll("/+$", "") + "/node-metrics");
+    }
+
     static String metricsUrl(String jellyfinLan) {
         try {
             return "http://" + new java.net.URL(jellyfinLan).getHost() + ":9100/metrics";
@@ -1153,7 +1160,7 @@ public class MainActivity extends Activity {
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         java.util.List<Tvs.Saved> tvs = cfg.saved(); // a step without "@Name" is for the first TV
         SceneRunner runner = new SceneRunner(cfg.lights(), tvs.isEmpty() ? null : cfg.tv(tvs.get(0)), cfg.switchBot(), cfg.get(Config.SB_BOT),
-            () -> Server.effective(Server.status(server, pub), Metrics.fetch(metricsUrl(server)) != null),
+            () -> Server.effective(Server.status(server, pub), stats(server, pub) != null),
             cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))))
             .music(cfg.spotify())
             .tvs(cfg::tvNamed)
@@ -1205,7 +1212,7 @@ public class MainActivity extends Activity {
             });
         });
         io.execute(() -> {
-            String stats = Metrics.fetch(metricsUrl(server));
+            String stats = stats(server, pub);
             ui(() -> { if (gen == generation && statsChecks.current(mid)) showStats(stats, true); });
         });
         tvCards();
