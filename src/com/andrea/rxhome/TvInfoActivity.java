@@ -77,7 +77,10 @@ public class TvInfoActivity extends Activity {
                 return;
             }
             String n = name.getText().toString().trim();
-            if (!n.isEmpty()) me.name = n;
+            if (!n.isEmpty() && !n.equals(me.name)) { // scenes naming it ("@Name") follow the new name
+                cfg.put(Config.SCENES, Scenes.renameTv(cfg.get(Config.SCENES), me.name, n));
+                me.name = n;
+            }
             apply(list, "stick", stickChoice);
             apply(list, "sky", skyChoice);
             cfg.save(list);

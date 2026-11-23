@@ -540,6 +540,7 @@ public class MainActivity extends Activity {
         void power(View v) {
             Ui.haptic(v);
             Ui.burst(v);
+            byHand(sc -> Scenes.usesTv(sc, saved.name, !cards.isEmpty() && cards.get(0) == this));
             status.setText("…");
             Tv tv = tv();
             io.execute(() -> {
@@ -630,6 +631,7 @@ public class MainActivity extends Activity {
 
         void send(boolean on, Integer brightness) {
             Ui.haptic(view);
+            byHand(sc -> Scenes.usesLight(sc, name));
             io.execute(() -> {
                 try {
                     tapo.set(on, brightness, null);
@@ -709,6 +711,7 @@ public class MainActivity extends Activity {
         }
 
         private void send(TapoCall call) {
+            byHand(sc -> Scenes.usesLight(sc, name));
             io.execute(() -> {
                 try {
                     call.run();
@@ -728,6 +731,7 @@ public class MainActivity extends Activity {
                 int b = i.optInt("brightness", on ? 100 : 0);
                 ui(() -> {
                     show(on, b, true);
+                    if (!on) byHand(sc -> Scenes.leavesOn(sc, name)); // switched off elsewhere: not the scene any more
                     bar.setEnabled(i.has("brightness"));
                     if (Tapo.hasColor(i)) {
                         dot.setBackground(circle(currentColor(i)));
@@ -840,6 +844,7 @@ public class MainActivity extends Activity {
     private void control(View v, MusicCall call) {
         Spotify sp = cfg.spotify();
         if (sp == null) return;
+        byHand(Scenes::usesMusic);
         Ui.haptic(v);
         io.execute(() -> {
             try {
@@ -985,6 +990,7 @@ public class MainActivity extends Activity {
     private void moveMusic(Target t) {
         Spotify sp = cfg.spotify();
         if (sp == null) return;
+        byHand(Scenes::usesMusic);
         speakersButton.setText("🔊 Moving…");
         String me = phoneName();
         io.execute(() -> {
@@ -1022,6 +1028,24 @@ public class MainActivity extends Activity {
         java.util.Set<String> s = new java.util.LinkedHashSet<>();
         for (String n : cfg.get(Config.SCENES_ACTIVE).split("\n")) if (!n.trim().isEmpty()) s.add(n.trim());
         return s;
+    }
+
+    /** The active scene, or null. */
+    private Scenes.Scene activeScene() {
+        java.util.Set<String> act = activeScenes();
+        if (act.isEmpty()) return null;
+        try {
+            for (Scenes.Scene sc : Scenes.parse(cfg.get(Config.SCENES))) if (act.contains(sc.name)) return sc;
+        } catch (ParseException e) {
+            // Unreadable scenes: none.
+        }
+        return null;
+    }
+
+    /** Something the active scene controls changed by hand: it's no longer what's on (nothing else is done). */
+    private void byHand(java.util.function.Predicate<Scenes.Scene> uses) {
+        Scenes.Scene a = activeScene();
+        if (a != null && uses.test(a)) saveActive(new java.util.LinkedHashSet<>());
     }
 
     private void saveActive(java.util.Set<String> s) {
@@ -1111,25 +1135,37 @@ public class MainActivity extends Activity {
         b.setEnabled(false);
         // A scene that switches things on is a toggle: tapped while active, it switches them off instead.
         // One that only switches things off (All off) is a plain button and clears every active scene.
-        Scenes.Scene off = Scenes.undo(scene);
+        // One active scene at a time: another one active means a smooth swap (fades, nothing off-and-on).
+        Scenes.Scene off = Scenes.undo(scene), before = null;
         boolean toggle = !off.steps.isEmpty(), turningOff = toggle && activeScenes().contains(scene.name);
-        Scenes.Scene todo = turningOff ? off : scene;
-        b.setText(turningOff ? "Turning off…" : "Running…");
+        if (toggle && !turningOff) {
+            try {
+                for (Scenes.Scene o : Scenes.parse(cfg.get(Config.SCENES))) {
+                    if (!o.name.equals(scene.name) && activeScenes().contains(o.name)) before = o;
+                }
+            } catch (ParseException e) {
+                // Unreadable scenes: nothing to swap from.
+            }
+        }
+        Scenes.Scene todo = turningOff ? off : before != null ? Scenes.swap(before, scene, cfg.lights().keySet()) : scene;
+        b.setText(turningOff ? "Turning off…" : before != null ? "Switching…" : "Running…");
         android.animation.ValueAnimator shimmer = Ui.shimmer(b);
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
-        SceneRunner runner = new SceneRunner(cfg.lights(), cfg.tv(), cfg.switchBot(), cfg.get(Config.SB_BOT),
+        java.util.List<Tvs.Saved> tvs = cfg.saved(); // a step without "@Name" is for the first TV
+        SceneRunner runner = new SceneRunner(cfg.lights(), tvs.isEmpty() ? null : cfg.tv(tvs.get(0)), cfg.switchBot(), cfg.get(Config.SB_BOT),
             () -> Server.effective(Server.status(server, pub), Metrics.fetch(metricsUrl(server)) != null),
             cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))))
-            .music(cfg.spotify());
+            .music(cfg.spotify())
+            .tvs(cfg::tvNamed)
+            .smooth(turningOff || before != null)
+            .signal(turningOff ? "off" : before != null ? "swap" : "start", before == null ? null : before.name);
         io.execute(() -> {
             int[] r = runner.run(todo);
             ui(() -> {
                 shimmer.cancel();
                 Ui.pop(b);
-                java.util.Set<String> act = activeScenes();
-                if (!toggle) act.clear();
-                else if (turningOff) act.remove(scene.name);
-                else act.add(scene.name);
+                java.util.Set<String> act = new java.util.LinkedHashSet<>();
+                if (toggle && !turningOff) act.add(scene.name); // the only active one now
                 saveActive(act);
                 b.setText(r[0] == r[1] ? (turningOff ? "Off" : "Done") : r[0] + "/" + r[1] + " done");
                 main.postDelayed(() -> { b.setText(scene.name); b.setEnabled(true); }, 3000);
