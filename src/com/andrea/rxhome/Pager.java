@@ -59,12 +59,18 @@ final class Pager extends HorizontalScrollView {
         post(() -> scrollTo(page * w, 0));
     }
 
+    // DOWN on a card's button goes to the child, never to onTouchEvent: reset the gesture here so startPage isn't stale.
     @Override
-    public boolean onTouchEvent(MotionEvent e) {
+    public boolean dispatchTouchEvent(MotionEvent e) {
         if (e.getActionMasked() == MotionEvent.ACTION_DOWN) {
             startPage = page;
             flung = false;
         }
+        return super.dispatchTouchEvent(e);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent e) {
         boolean r = super.onTouchEvent(e);
         int a = e.getActionMasked();
         if ((a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) && !flung) settle(0);
