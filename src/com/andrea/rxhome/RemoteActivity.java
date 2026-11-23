@@ -30,7 +30,6 @@ public class RemoteActivity extends Activity {
     private final AtomicInteger queued = new AtomicInteger();
     private Runnable repeater;
     private Tv tv;
-    private TextView stickOn;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -65,16 +64,6 @@ public class RemoteActivity extends Activity {
         TextView source = small(tvButton("SOURCE", 178)); // the TV's inputs, whatever the switch says
         LinearLayout.LayoutParams srcLp = new LinearLayout.LayoutParams(-2, -2);
         srcLp.rightMargin = Ui.dp(this, 12);
-        // Shown only while the FireStick is in standby (checked on resume): wakes the stick alone.
-        stickOn = small(Ui.button(this, "FIRESTICK ON", true));
-        stickOn.setContentDescription("Turn the FireStick on");
-        stickOn.setVisibility(View.GONE);
-        stickOn.setOnClickListener(v -> {
-            Ui.haptic(v);
-            v.setVisibility(View.GONE);
-            send(tv::wakeStick);
-        });
-        top.addView(stickOn, srcLp);
         if (tv.showSwitch()) top.addView(styleSwitch(), srcLp);
         top.addView(source, srcLp);
         top.addView(power);
@@ -210,10 +199,18 @@ public class RemoteActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (!tv.hasStick()) return;
+        if (!tv.hasStick() || !tv.mode().equals("stick")) return; // also runs after switching to STICK (recreate)
         io.execute(() -> {
-            boolean standby = tv.state() == State.OFF; // with a stick, state() is the stick's own
-            runOnUiThread(() -> stickOn.setVisibility(standby ? View.VISIBLE : View.GONE));
+            if (tv.state() != State.OFF) return; // with a stick, state() is the stick's own
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("FireStick is off")
+                    .setMessage("It's in standby. Wake it up? (The TV is left as it is.)")
+                    .setPositiveButton("Wake it", (d, w) -> send(tv::wakeStick))
+                    .setNegativeButton("Not now", null)
+                    .show();
+            });
         });
     }
 
