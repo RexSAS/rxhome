@@ -396,11 +396,51 @@ public class MainActivity extends Activity {
             tvBox.addView(c.tile);
             return;
         }
-        for (Tvs.Saved t : list) {
-            TvCard c = new TvCard(t);
+        // One TV in view; swipe for the next (order from Settings). The one shown last time comes back.
+        Pager pager = new Pager(this);
+        LinearLayout dots = new LinearLayout(this);
+        dots.setGravity(Gravity.CENTER);
+        int shown = 0;
+        for (int i = 0; i < list.size(); i++) {
+            TvCard c = new TvCard(list.get(i));
             cards.add(c);
-            tvBox.addView(c.tile);
+            c.tile.setLayoutParams(new android.widget.FrameLayout.LayoutParams(-1, -2));
+            pager.add(c.tile);
+            if (list.get(i).uid.equals(cfg.get(TV_SHOWN))) shown = i;
+            View dot = new View(this);
+            int d = Ui.dp(this, 6);
+            LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(d, d);
+            dl.setMargins(d / 2, 0, d / 2, 0);
+            dots.addView(dot, dl);
         }
+        pager.onPage = page -> {
+            cfg.put(TV_SHOWN, list.get(page).uid);
+            paintDots(dots, page);
+        };
+        pager.show(shown);
+        paintDots(dots, shown);
+        LinearLayout.LayoutParams pl = new LinearLayout.LayoutParams(-1, -2);
+        pl.leftMargin = pl.rightMargin = -pager.gap(); // cards line up with the others; a gap shows while swiping
+        tvBox.addView(pager, pl);
+        if (list.size() > 1) {
+            LinearLayout.LayoutParams dotsLp = new LinearLayout.LayoutParams(-1, -2);
+            dotsLp.topMargin = Ui.dp(this, 8);
+            tvBox.addView(dots, dotsLp);
+        }
+        tvBox.addView(new View(this), new LinearLayout.LayoutParams(1, Ui.dp(this, 12))); // the cards' usual gap below
+    }
+
+    static final String TV_SHOWN = "tv_shown"; // the TV card in view on the home screen
+
+    /** The pager's dots: the TV in view red, the others dim. */
+    private void paintDots(LinearLayout dots, int page) {
+        for (int i = 0; i < dots.getChildCount(); i++) {
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            g.setColor(i == page ? Ui.RED : 0xFF3A3A44);
+            dots.getChildAt(i).setBackground(g);
+        }
+        dots.setContentDescription("TV " + (page + 1) + " of " + dots.getChildCount());
     }
 
     private final class TvCard {
@@ -424,6 +464,8 @@ public class MainActivity extends Activity {
             row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
             tile.addView(row);
             if (saved == null) return;
+            tile.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, TvInfoActivity.class)
+                .putExtra(TvInfoActivity.UID, saved.uid))); // the card itself (not its buttons): this TV's settings
             TextView power = Ui.power(MainActivity.this);
             power.setContentDescription("Power " + saved.name);
             power.setOnClickListener(this::power);
