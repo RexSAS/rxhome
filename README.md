@@ -3,7 +3,7 @@
 A phone app with fast controls for the home setup, part of [rxenv](https://github.com/RexSAS/rxenv):
 
 - **rexserver**: online or not (LAN address first, then `rxfilms.rxsas.it`), CPU / temperature / RAM / uptime, and a power button that presses the server's SwitchBot Bot (works from anywhere, even with the server off).
-- **TV**: Samsung (including 2010-2015 models), LG and Philips TVs, FireSticks and Sky Q boxes, in any home: add each once; the home screen shows a card per TV, in the order set with ▲ ▼ in Settings → TVs. Tap a TV there for its **TV info**: its name, and which FireStick and Sky box are plugged into it (bound by hand: a home can have several FireSticks). Remote and Apps work on the card you open them from. Power on/off, a no-look remote (touchpad: swipe to move, tap for OK, hold for long press, draw ○ for HOME, ⊃ for BACK, C for play/pause; the other keys along the bottom edge, SOURCE for the TV's inputs at the top; the phone's volume buttons drive the TV's; holding any key holds it on the TV; with a FireStick or Sky box bound, buttons at the top (*TV · FireStick · Sky*) pick which one the arrows and touchpad drive, FireStick by default; in Sky style the bottom rows are Sky's: channel up/down, info, record, the four colours), and an Apps screen (a TV without a FireStick lists its own apps): RxFilms (Continue watching / Next up, after a one-time Jellyfin Quick Connect sign-in in Settings), Spotify (Liked Songs / DJ X), YouTube in SmartTube (Claude FM); tap an app to open it, a shortcut to go straight there (the TV is switched on first if needed).
+- **TV**: Samsung (including 2010-2015 models), LG and Philips TVs, FireSticks and Sky Q boxes, in any home: add each once; the home screen shows one TV card at a time: swipe it for the next, in the order set with ▲ ▼ in Settings → TVs. Tap the card (or the TV in Settings) for its **TV info**: its name, and which FireStick and Sky box are plugged into it (bound by hand: a home can have several FireSticks). Remote and Apps work on the card you open them from; the remote's text bar (FireStick style) types on the TV as you go. Power on/off, a no-look remote (touchpad: swipe to move, tap for OK, hold for long press, draw ○ for HOME, ⊃ for BACK, C for play/pause; the other keys along the bottom edge, SOURCE for the TV's inputs at the top; the phone's volume buttons drive the TV's; holding any key holds it on the TV; with a FireStick or Sky box bound, buttons at the top (*TV · FireStick · Sky*) pick which one the arrows and touchpad drive, FireStick by default; in Sky style the bottom rows are Sky's: channel up/down, info, record, the four colours), and an Apps screen (a TV without a FireStick lists its own apps): RxFilms (Continue watching / Next up, after a one-time Jellyfin Quick Connect sign-in in Settings), Spotify (Liked Songs / DJ X), YouTube in SmartTube (Claude FM); tap an app to open it, a shortcut to go straight there (the TV is switched on first if needed).
 - **Tapo lights**: on/off and brightness, straight over Wi-Fi without the Tapo cloud.
 - **Scenes**: one tap for several things, e.g. *Movie night* = lights 20%, TV on, open RxFilms.
 
@@ -65,3 +65,18 @@ Open ⚙ Settings:
 
 - The server status can't tell "off" from "can't reach it" away from home (Cloudflare only lets in allowed IPs), so it shows "unknown" there.
 - Tapo: KLAP (and the older passthrough login) only. TPAP, the SPAKE2+ login of 2025 firmware, isn't implemented; with Third-Party Compatibility on, those devices accept KLAP.
+
+## Signal to the TV launcher
+
+When a scene runs, rxhome tells each TV it uses, through the stick, with an explicit broadcast to the launcher (`com.andrea.tvlauncher`), so the launcher can fade the picture:
+
+```
+am broadcast -a com.andrea.rxhome.SCENE -p com.andrea.tvlauncher
+  --es event   start | swap | off | ready | tv_off
+  --es scene   <scene name>
+  --ei fade_ms 3000
+  --es from    <previous scene>        (swap only)
+  --es id      <id>                    (ready only)
+```
+
+`start`, `swap` and `off` come right before a scene (starting, swapping from another one, or turning off) first changes that TV's picture; rxhome then waits `fade_ms` before changing it, so the launcher can fade to black. `ready` comes once the scene's last step has run: the launcher fades the new picture in when the screen settles and logs `reveal <id> <ms>`, which rxhome follows to bring the TV's volume (paired Philips) back up over the same time; it faded out with the picture. `tv_off` comes just before rxhome switches that TV off: rxhome fades the sound and waits `fade_ms` before sending standby. Without a receiver, scenes still run; the sound just comes back after 30 s.
