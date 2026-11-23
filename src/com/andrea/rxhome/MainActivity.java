@@ -484,6 +484,7 @@ public class MainActivity extends Activity {
         final LinearLayout tile;
         final TextView status;
         final StatusRing ring;
+        State last = State.UNREACHABLE;
 
         TvCard(Tvs.Saved saved) {
             this.saved = saved;
@@ -534,7 +535,15 @@ public class MainActivity extends Activity {
             startActivity(new Intent(MainActivity.this, screen));
         }
 
+        /** A TV alone goes silent when off (LG, Philips): if other home devices answer, it's off, not away. */
+        boolean silentMeansOff() {
+            Tv tv = tv();
+            return last == State.UNREACHABLE && homeSeen && tv.hasScreen() && !tv.hasStick();
+        }
+
         void show(State s) {
+            last = s;
+            if (silentMeansOff()) s = State.OFF;
             Tv tv = tv(); // a TV's state is its own; on its own, a FireStick's or Sky box's
             String who = tv.hasScreen() ? "" : tv.hasStick() ? " · FireStick" : " · Sky";
             Ui.setText(status, s == State.ON ? "On" + who
@@ -1198,6 +1207,7 @@ public class MainActivity extends Activity {
                 genHome = h;
                 homeSeen = h;
                 paintServer();
+                for (TvCard c : cards) if (c.silentMeansOff()) c.show(c.last);
                 afterChecks();
             });
         });
@@ -1237,7 +1247,7 @@ public class MainActivity extends Activity {
                     // A key prompt means the stick answered: we're home.
                     stick = e instanceof Adb.AdbAuthException ? State.ON : State.UNREACHABLE;
                     shown = State.UNREACHABLE;
-                    why = adbError(e);
+                    why = e instanceof Adb.AdbAuthException ? adbError(e) : null; // else show() says it
                 }
                 State st = stick, sh = shown;
                 String w = why;
