@@ -72,6 +72,25 @@ class Tapo {
         return "{\"device_on\":true,\"hue\":" + h + ",\"saturation\":" + s + ",\"color_temp\":0}";
     }
 
+    /** On, with brightness and white or colour in one command: the bulb fades in once, already right. */
+    void turnOn(Integer brightness, Integer kelvin, int[] color) throws IOException {
+        JSONObject i = lastInfo != null ? lastInfo : info();
+        if (!i.has("brightness")) brightness = null;
+        call("{\"method\":\"set_device_info\",\"params\":" + onParams(brightness, kelvin, color, i.has("color_temp_range")) + "}");
+    }
+
+    static String onParams(Integer brightness, Integer kelvin, int[] color, boolean hasTemp) {
+        StringBuilder s = new StringBuilder("{\"device_on\":true");
+        if (brightness != null) s.append(",\"brightness\":").append(Math.max(1, brightness));
+        if (color != null) {
+            String c = colorParams(color[0], color[1]); // {"device_on":true,"hue":..,"saturation":..,"color_temp":0}
+            s.append(',').append(c, c.indexOf("\"hue\""), c.length() - 1);
+        } else if (kelvin != null && hasTemp) {
+            s.append(",\"color_temp\":").append(kelvin);
+        }
+        return s.append('}').toString();
+    }
+
     /** True for colour lights (strips, colour bulbs): their info reports a hue. */
     static boolean hasColor(JSONObject info) {
         return info.has("hue");

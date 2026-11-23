@@ -14,6 +14,15 @@ public class ScenesTest {
         return s.toString();
     }
 
+    static String swap(String from, String to, java.util.List<String> lights) throws Exception {
+        StringBuilder s = new StringBuilder();
+        for (String[] step : Scenes.swap(Scenes.parse(from).get(0), Scenes.parse(to).get(0), lights).steps) {
+            if (s.length() > 0) s.append("; ");
+            s.append(Scenes.formatStep(step));
+        }
+        return s.toString();
+    }
+
     public static void main(String[] a) throws Exception {
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
         assert s.size() == 4 : s.size();
@@ -118,6 +127,61 @@ public class ScenesTest {
         assert undo("M: tv off; tv on; light Desk off; light Desk on 50").equals("tv off; light Desk off");
         assert undo("All off: tv off; light all off; server off").isEmpty();
         assert undo("M: tv app org.rxfilms.tv; keys home; phone remote; wait 3; server press").isEmpty();
+
+        // Several TVs: a TV step may end with "@Name"; without it, it's the first TV.
+        assert Scenes.parse("A: tv on @Camera; tv app org.rxfilms.tv resume \"@Living room\"; keys home ok @Camera; tv volume 20 @Camera")
+            .get(0).steps.size() == 4;
+        failsOnLine("A: tv on @", 1);
+        failsOnLine("A: tv dance @Camera", 1);
+        failsOnLine("A: light all on @Camera", 1);       // only TV steps name a TV
+        String[] named = Scenes.parse("A: tv on @Camera").get(0).steps.get(0);
+        assert "Camera".equals(Scenes.tvTarget(named)) && Scenes.tvTarget(new String[] {"tv", "on"}) == null;
+        assert Arrays.equals(Scenes.untargeted(named), new String[] {"tv", "on"});
+        assert Scenes.describe(named).equals("TV on · Camera") : Scenes.describe(named);
+        assert Scenes.describe(new String[] {"keys", "home", "@Camera"}).equals("Remote: Home · Camera");
+        // Swapping scenes: the old one switches off only what the new one won't use, then the new one runs.
+        java.util.List<String> lightNames = Arrays.asList("Desk", "Strip");
+        assert swap("A: light all on 20; tv on; tv app org.rxfilms.tv", "B: light Desk on 80 color:210,80; music Cucina", lightNames)
+            .equals("tv off; light Strip off; light Desk on 80 color:210,80; music Cucina")
+            : swap("A: light all on 20; tv on", "B: light Desk on 80", lightNames);
+        assert swap("A: light Desk on; music Cucina; tv on", "B: tv on; tv app org.smarttube.stable; light Strip on 50", lightNames)
+            .equals("music-pause; light Desk off; tv on; tv app org.smarttube.stable; light Strip on 50");
+        assert swap("A: light Desk on; tv on", "B: light all on 30", lightNames).equals("tv off; light all on 30");
+        assert swap("A: tv on", "B: tv app org.rxfilms.tv", lightNames).equals("tv app org.rxfilms.tv");   // the TV stays on
+        assert swap("A: tv on @Camera; music Cucina", "B: tv on; music Bagno", lightNames)
+            .equals("tv off @Camera; tv on; music Bagno");                                                   // another TV
+        assert swap("A: light all on", "B: light Desk on", java.util.Collections.<String>emptyList())
+            .equals("light all off; light Desk on");                                                         // lights unknown: all off
+
+        // What a scene controls (a change by hand there means it's no longer active).
+        Scenes.Scene uses = Scenes.parse("M: light Desk on 50; tv on @Camera; keys home; music Cucina").get(0);
+        assert Scenes.usesLight(uses, "Desk") && !Scenes.usesLight(uses, "Strip");
+        assert Scenes.usesLight(Scenes.parse("M: light all off").get(0), "Strip");
+        assert Scenes.usesTv(uses, "Camera", false) && Scenes.usesTv(uses, "Salotto", true) && !Scenes.usesTv(uses, "Studio", false);
+        assert !Scenes.usesTv(Scenes.parse("M: light Desk on").get(0), "Salotto", true);
+        assert Scenes.usesMusic(uses) && !Scenes.usesMusic(Scenes.parse("M: tv on").get(0));
+        // Lights it leaves on (found off later = no longer active).
+        assert Scenes.leavesOn(uses, "Desk") && !Scenes.leavesOn(uses, "Strip");
+        assert Scenes.leavesOn(Scenes.parse("M: light all on 30; light Strip off").get(0), "Desk");
+        assert !Scenes.leavesOn(Scenes.parse("M: light all on 30; light Strip off").get(0), "Strip");
+
+        // The TV stays on whenever the new scene uses it at all: remote keys, volume, the phone remote too.
+        assert swap("A: tv on", "B: keys home ok", lightNames).equals("keys home ok");
+        assert swap("A: tv on", "B: tv volume 20", lightNames).equals("tv volume 20");
+        assert swap("A: tv on", "B: phone remote", lightNames).equals("phone remote");
+        assert swap("A: tv on @Camera", "B: keys home @camera", lightNames).equals("keys home @camera"); // any case
+        assert swap("A: tv on", "B: tv off", lightNames).equals("tv off");                                // its own off
+
+        // Renaming a TV renames it in the scenes too; other steps and TVs stay as they are.
+        String renamed = Scenes.renameTv("A: tv on @Camera; keys home @camera; tv on @Studio; light Desk on\nB: tv off @Camera\n",
+            "Camera", "Bedroom TV");
+        assert renamed.equals("A: tv on \"@Bedroom TV\"; keys home \"@Bedroom TV\"; tv on @Studio; light Desk on\nB: tv off \"@Bedroom TV\"\n")
+            : renamed;
+        assert Scenes.renameTv("not: valid: [", "A", "B").equals("not: valid: [");   // unreadable: left alone
+
+        // Turning off: each TV the scene turned on.
+        assert undo("M: tv on; tv on @Camera; tv off @Studio; light Desk on").equals("tv off; tv off @Camera; light Desk off")
+            : undo("M: tv on; tv on @Camera");
 
         // Lights setting: "Name=IP" per line, order kept, junk lines ignored.
         java.util.Map<String, String> l = Scenes.lights("Ceiling=192.168.1.20\n LED strip = 192.168.1.21 \n\nnonsense\n");

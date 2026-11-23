@@ -43,6 +43,23 @@ public class FireTvTest {
         // Our own (the stick's) messages don't count, nor does nothing at all.
         assert FireTv.parseTvPower("    [S] time=2026-11-17 21:43:24 message=<Report Power Status> 40:90:00\n") == null;
         assert FireTv.parseTvPower("") == null;
+        // Switched on with its own remote, a TV often sends no power report, just "show this input" messages
+        // (Set Stream Path, Routing Change, Request Active Source): a TV in standby doesn't send those.
+        String streamPath = "    [R] time=2026-11-18 20:01:02 message=<Set Stream Path> 0F:86:30:00\n";
+        String routing = "    [R] time=2026-11-18 20:01:03 message=<Routing Change> 0F:80:00:00:30:00\n";
+        String askSource = "    [R] time=2026-11-18 20:01:04 message=<Request Active Source> 0F:85\n";
+        assert FireTv.parseTvPower(standby + streamPath) == Boolean.TRUE;
+        assert FireTv.parseTvPower(standby + routing) == Boolean.TRUE;
+        assert FireTv.parseTvPower(standby + askSource) == Boolean.TRUE;
+        assert FireTv.parseTvPower(streamPath + standby) == Boolean.FALSE;   // then it went off
+        // Only the TV's own messages count (address 0), not the stick's.
+        assert FireTv.parseTvPower(standby + "    [S] time=2026-11-18 20:01:05 message=<Active Source> 4F:82:30:00\n") == Boolean.FALSE;
+        // The scene signal for the launcher: one explicit broadcast, names quoted for the shell.
+        assert FireTv.signalCommand("swap", "Movie night", "Kid's room", 1500).equals(
+            "am broadcast -a com.andrea.rxhome.SCENE -p com.andrea.tvlauncher --es event 'swap' --es scene 'Movie night'"
+                + " --ei fade_ms 1500 --es from 'Kid'\\''s room'") : FireTv.signalCommand("swap", "Movie night", "Kid's room", 1500);
+        assert FireTv.parseReveal("I HomeService: reveal abc 1200\nI HomeService: reveal xyz 900\n", "xyz") == 900;
+        assert FireTv.parseReveal("", "xyz") == -1;
 
         // The stick reads it from its CEC log (routing by it: TvTest).
         assert stickWithCec(standby).cecTvOn() == Boolean.FALSE;

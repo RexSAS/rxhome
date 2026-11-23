@@ -157,21 +157,81 @@ class FireTv {
 
     /** The stick's HDMI-CEC log lines that carry the TV's power. */
     String cecLog() throws IOException {
-        return adb.shell("dumpsys hdmi_control | grep -E 'Standby>|Report Power Status>'", 3000);
+        return adb.shell("dumpsys hdmi_control | grep -E 'Standby>|Report Power Status>|Set Stream Path>|Routing Change>|Request Active Source>'", 3000);
     }
 
-    private static final java.util.regex.Pattern TV_POWER = java.util.regex.Pattern.compile(
-        "\\[R\\][^\\n]*<(?:Standby> 0[0-9A-Fa-f]:36|Report Power Status> 0[0-9A-Fa-f]:90:0([0-3]))");
+    /** A message the TV sent (logical address 0): its opcode, and the first parameter if any. */
+    private static final java.util.regex.Pattern TV_SAID = java.util.regex.Pattern.compile(
+        "\\[R\\][^\\n]*<[^>\\n]*> 0[0-9A-Fa-f]:([0-9A-Fa-f]{2})(?::([0-9A-Fa-f]{2}))?");
 
     /**
-     * The TV's last word on its power, from messages it sent (logical address 0): &lt;Standby&gt; = off,
-     * &lt;Report Power Status&gt; 00 on / 02 turning on / 01, 03 standby. Null if it said nothing.
+     * The TV's last word on its power, from messages it sent: &lt;Standby&gt; = off, &lt;Report Power Status&gt;
+     * 00 on / 02 turning on / 01, 03 standby; and "show this input" (Routing Change 80, Request Active Source
+     * 85, Set Stream Path 86), which a TV switched on with its own remote sends instead of a power report and
+     * never sends in standby. Null if it said nothing about it.
      */
     static Boolean parseTvPower(String dump) {
-        java.util.regex.Matcher m = TV_POWER.matcher(dump);
+        java.util.regex.Matcher m = TV_SAID.matcher(dump);
         Boolean on = null;
-        while (m.find()) on = m.group(1) != null && (m.group(1).equals("0") || m.group(1).equals("2"));
+        while (m.find()) {
+            String op = m.group(1).toUpperCase(), arg = m.group(2);
+            if (op.equals("36")) on = false;
+            else if (op.equals("90") && arg != null) on = arg.equals("00") || arg.equals("02");
+            else if (op.equals("80") || op.equals("85") || op.equals("86")) on = true;
+        }
         return on;
+    }
+
+    static final String SIGNAL = "com.andrea.rxhome.SCENE", LAUNCHER = "com.andrea.tvlauncher";
+
+    /**
+     * Tells the launcher on the TV what rxhome is doing (so it can fade): event "start" / "swap" / "off" (a
+     * scene, sent right before it first changes the picture), "tv_off" (about to switch the TV off: fade now,
+     * fade_ms long); from = a swap's previous scene.
+     */
+    void signal(String event, String scene, String from) throws IOException {
+        adb.shell(signalCommand(event, scene, from, SceneRunner.FADE_MS), 3000);
+    }
+
+    /** "ready": the scene's last step has run. id names it in the launcher's log (awaitReveal). */
+    void ready(String scene, String id) throws IOException {
+        adb.shell(signalCommand("ready", scene, null, SceneRunner.FADE_MS) + " --es id " + quote(id), 3000);
+    }
+
+    private static final java.util.regex.Pattern REVEAL = java.util.regex.Pattern.compile("reveal (\\S+) (\\d+)");
+
+    /**
+     * Waits up to maxMs for the launcher to start fading the picture in after "ready" `id` (it logs
+     * "reveal <id> <ms>"); returns how long that fade lasts, or -1.
+     */
+    int awaitReveal(String id, int maxMs) {
+        long end = System.currentTimeMillis() + maxMs;
+        try {
+            while (System.currentTimeMillis() < end) {
+                int ms = parseReveal(adb.shell("logcat -d -s HomeService:I | grep 'reveal " + id + " '", 3000), id);
+                if (ms >= 0) return ms;
+                Thread.sleep(250);
+            }
+        } catch (IOException | RuntimeException | InterruptedException e) {
+            // No launcher log to follow.
+        }
+        return -1;
+    }
+
+    static int parseReveal(String log, String id) {
+        java.util.regex.Matcher m = REVEAL.matcher(log);
+        while (m.find()) if (m.group(1).equals(id)) return Integer.parseInt(m.group(2));
+        return -1;
+    }
+
+    static String signalCommand(String event, String scene, String from, int fadeMs) {
+        return "am broadcast -a " + SIGNAL + " -p " + LAUNCHER + " --es event " + quote(event) + " --es scene " + quote(scene)
+            + " --ei fade_ms " + fadeMs + (from == null ? "" : " --es from " + quote(from));
+    }
+
+    /** For the TV's shell: one word, whatever it holds. */
+    private static String quote(String s) {
+        return "'" + s.replace("'", "'\\''") + "'";
     }
 
     /** TV errors that don't stop the action go to the system log (Android: tag System.err). No secrets. */

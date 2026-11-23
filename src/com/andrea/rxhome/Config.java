@@ -135,6 +135,12 @@ final class Config {
         return t;
     }
 
+    /** A TV by its name (any case), for scene steps ending in "@Name"; null if there's none by that name. */
+    synchronized Tv tvNamed(String name) {
+        for (Tvs.Saved s : saved()) if (s.name.equalsIgnoreCase(name)) return tv(s);
+        return null;
+    }
+
     private static Screen screen(Tvs.Saved s) {
         switch (s.brand) {
             case "samsung": return new Samsung(s.ip, s.auth, s.pin, s.mac, s.id);

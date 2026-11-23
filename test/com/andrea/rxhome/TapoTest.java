@@ -89,6 +89,11 @@ public class TapoTest {
         // set_device_info only carries what was asked, and drops colour temperature on devices without it.
         assert Tapo.setParams(true, 20, 2700, false).equals("{\"device_on\":true,\"brightness\":20}");
         assert Tapo.setParams(false, null, null, true).equals("{\"device_on\":false}");
+        // One "on" with everything (the bulb fades in once, already in its new colour).
+        assert Tapo.onParams(30, null, new int[] {210, 80}, true)
+            .equals("{\"device_on\":true,\"brightness\":30,\"hue\":210,\"saturation\":80,\"color_temp\":0}") : Tapo.onParams(30, null, new int[] {210, 80}, true);
+        assert Tapo.onParams(50, 2700, null, true).equals("{\"device_on\":true,\"brightness\":50,\"color_temp\":2700}");
+        assert Tapo.onParams(null, 2700, null, false).equals("{\"device_on\":true}");
         assert Tapo.setParams(null, null, 2700, true).equals("{\"color_temp\":2700}");
     }
 

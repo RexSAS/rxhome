@@ -126,6 +126,8 @@ final class Scenes {
 
     /** A step in words, e.g. "All lights on · 20%". */
     static String describe(String[] s) {
+        String tvName = tvTarget(s);
+        if (tvName != null) return describe(untargeted(s)) + " · " + tvName;
         switch (s[0]) {
             case "light": {
                 String who = s[1].equals("all") ? "All lights" : s[1];
@@ -187,11 +189,18 @@ final class Scenes {
      */
     static Scene undo(Scene scene) {
         boolean music = false;
-        Boolean tvOn = null;
+        Map<String, Boolean> tvs = new LinkedHashMap<>(); // per TV ("" = the first): on or off at the end
         Map<String, Boolean> lights = new LinkedHashMap<>(); // the last on/off each light was left in
         for (String[] s : scene.steps) {
             if (s[0].equals("music")) music = true;
-            else if (s[0].equals("tv") && (s[1].equals("on") || s[1].equals("off"))) tvOn = s[1].equals("on");
+            else if (s[0].equals("tv")) {
+                String[] b = untargeted(s);
+                if (b[1].equals("on") || b[1].equals("off")) {
+                    String t = tvTarget(s) == null ? "" : tvTarget(s);
+                    tvs.remove(t);
+                    tvs.put(t, b[1].equals("on"));
+                }
+            }
             else if (s[0].equals("light")) {
                 lights.remove(s[1]); // keep the order of the last mention
                 lights.put(s[1], s[2].equals("on"));
@@ -199,11 +208,110 @@ final class Scenes {
         }
         List<String[]> steps = new ArrayList<>();
         if (music) steps.add(new String[] {"music-pause"});
-        if (Boolean.TRUE.equals(tvOn)) steps.add(new String[] {"tv", "off"});
+        for (Map.Entry<String, Boolean> e : tvs.entrySet()) {
+            if (e.getValue()) steps.add(e.getKey().isEmpty() ? new String[] {"tv", "off"} : new String[] {"tv", "off", "@" + e.getKey()});
+        }
         for (Map.Entry<String, Boolean> e : lights.entrySet()) {
             if (e.getValue()) steps.add(new String[] {"light", e.getKey(), "off"});
         }
         return new Scene(scene.name, steps);
+    }
+
+    /**
+     * From one active scene to another: the old one switches off only what the new one won't use (no TV
+     * off-and-on, no music pause before it moves, lights fade straight to their new level), then the new one.
+     * lightNames: every light, so "all lights off" can spare the ones the new scene sets.
+     */
+    static Scene swap(Scene from, Scene to, java.util.Collection<String> lightNames) {
+        boolean music = false, allLights = false;
+        java.util.Set<String> tvs = new java.util.HashSet<>(), lit = new java.util.HashSet<>();
+        for (String[] s : to.steps) {
+            if (s[0].equals("music")) music = true;
+            else if (s[0].equals("tv") || s[0].equals("keys")) { // any step on a TV: the new scene decides it (even "off")
+                tvs.add(tvTarget(s) == null ? "" : tvTarget(s).toLowerCase());
+            } else if (s[0].equals("phone")) { // the remote on the phone drives the first TV
+                tvs.add("");
+            } else if (s[0].equals("light")) {
+                if (s[1].equals("all")) allLights = true;
+                else lit.add(s[1]);
+            }
+        }
+        List<String[]> steps = new ArrayList<>();
+        for (String[] u : undo(from).steps) {
+            if (u[0].equals("music-pause")) {
+                if (!music) steps.add(u);
+            } else if (u[0].equals("tv")) {
+                if (!tvs.contains(tvTarget(u) == null ? "" : tvTarget(u).toLowerCase())) steps.add(u);
+            } else if (!allLights) { // a light off
+                if (!u[1].equals("all")) {
+                    if (!lit.contains(u[1])) steps.add(u);
+                } else if (lightNames.isEmpty()) {
+                    steps.add(u);
+                } else {
+                    for (String n : lightNames) if (!lit.contains(n)) steps.add(new String[] {"light", n, "off"});
+                }
+            }
+        }
+        steps.addAll(to.steps);
+        return new Scene(to.name, steps);
+    }
+
+    /** The TV a "tv" / "keys" step names with a last "@Name" token; null = the first TV. */
+    static String tvTarget(String[] s) {
+        if (!(s[0].equals("tv") || s[0].equals("keys")) || s.length < 2 || !s[s.length - 1].startsWith("@")) return null;
+        return s[s.length - 1].substring(1);
+    }
+
+    /** Whether the scene sets this light (by its name or "all"). */
+    static boolean usesLight(Scene sc, String light) {
+        for (String[] s : sc.steps) if (s[0].equals("light") && (s[1].equals("all") || s[1].equals(light))) return true;
+        return false;
+    }
+
+    /** Whether the scene uses this TV (TV and remote-key steps; no "@Name" = the first TV). */
+    static boolean usesTv(Scene sc, String tvName, boolean first) {
+        for (String[] s : sc.steps) {
+            if (!s[0].equals("tv") && !s[0].equals("keys")) continue;
+            String t = tvTarget(s);
+            if (t == null ? first : t.equalsIgnoreCase(tvName)) return true;
+        }
+        return false;
+    }
+
+    static boolean usesMusic(Scene sc) {
+        for (String[] s : sc.steps) if (s[0].equals("music")) return true;
+        return false;
+    }
+
+    /** Whether the scene leaves this light on (its last word on it, by name or "all"). */
+    static boolean leavesOn(Scene sc, String light) {
+        boolean on = false;
+        for (String[] s : sc.steps) {
+            if (s[0].equals("light") && (s[1].equals("all") || s[1].equals(light))) on = s[2].equals("on");
+        }
+        return on;
+    }
+
+    /** Scene text with a TV's new name in its steps; unreadable text is left as it is. */
+    static String renameTv(String text, String oldName, String newName) {
+        List<Scene> list;
+        try {
+            list = parse(text);
+        } catch (ParseException e) {
+            return text;
+        }
+        for (Scene sc : list) {
+            for (String[] s : sc.steps) {
+                String t = tvTarget(s);
+                if (t != null && t.equalsIgnoreCase(oldName)) s[s.length - 1] = "@" + newName;
+            }
+        }
+        return format(list);
+    }
+
+    /** The step without its "@Name". */
+    static String[] untargeted(String[] s) {
+        return tvTarget(s) == null ? s : java.util.Arrays.copyOf(s, s.length - 1);
     }
 
     /** One line for Settings' scene rows. */
@@ -238,6 +346,11 @@ final class Scenes {
 
     private static void check(String[] s, int line) throws ParseException {
         String bad = "Line " + line + ": can't understand \"" + String.join(" ", s) + "\"";
+        String tvName = tvTarget(s);
+        if (tvName != null) {
+            if (tvName.trim().isEmpty() || s.length < 3) throw new ParseException(bad, line);
+            s = untargeted(s);
+        }
         boolean ok;
         switch (s[0]) {
             case "light":

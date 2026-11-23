@@ -9,7 +9,7 @@ import java.util.Map;
 
 public class SceneRunnerTest {
 
-    static final List<String> log = new ArrayList<>();
+    static final List<String> log = new ArrayList<>(), signals = new ArrayList<>();
     static State stick = State.ON, server = State.ON, tvPower = State.OFF;
     static String answer;
 
@@ -29,6 +29,19 @@ public class SceneRunnerTest {
             log.add(name + " " + on + " " + brightness + " " + kelvin);
         }
 
+        int level = -1; // what info() reports: -1 off, else on at this brightness
+
+        @Override
+        org.json.JSONObject info() {
+            return new org.json.JSONObject().put("device_on", level >= 0).put("brightness", Math.max(level, 0));
+        }
+
+        @Override
+        void turnOn(Integer brightness, Integer kelvin, int[] color) throws IOException {
+            if (broken) throw new IOException("unreachable");
+            log.add(name + " on " + brightness + " " + kelvin + (color == null ? "" : " color " + color[0] + " " + color[1]));
+        }
+
         @Override
         void color(int hue, int saturation) throws IOException {
             if (broken) throw new IOException("unreachable");
@@ -46,9 +59,16 @@ public class SceneRunnerTest {
         @Override void view(String uri, String pkg) { log.add("tv view " + uri); }
         @Override void claudeFm() { log.add("tv play"); }
         @Override void openItem(String component, String id) { log.add("tv item " + id); }
-        @Override void key(int code) { log.add("key " + code); }
+        @Override synchronized void key(int code) { log.add("key " + code); }
         @Override void tvVolume(int level) { log.add("tv volume " + level); }
         @Override void tvMute() { log.add("tv mute"); }
+        @Override void signal(String event, String scene, String from) {
+            signals.add(event + " " + scene + (from == null ? "" : " from " + from));
+        }
+        @Override void ready(String scene, String id) { signals.add("ready " + scene); }
+        int level = -1; // the TV's volume, as a paired Philips reads it
+        @Override int volume() { return level; }
+        @Override int awaitReveal(String id, int maxMs) { log.add("await reveal"); return 600; }
     }
 
     static class FakeBot extends SwitchBot {
@@ -74,12 +94,14 @@ public class SceneRunnerTest {
         Map<String, Tapo> lights = new LinkedHashMap<>();
         lights.put("Desk", new FakeLight("Desk", false));
         lights.put("LED strip", new FakeLight("LED strip", true));
-        SceneRunner r = new SceneRunner(lights, new FakeTv(), new FakeBot(), "bot1", () -> server, null, pkg -> {
+        FakeTv tv = new FakeTv();
+        SceneRunner r = new SceneRunner(lights, tv, new FakeBot(), "bot1", () -> server, null, pkg -> {
             log.add("ask " + pkg);
             return answer;
         }, () -> log.add("phone remote")) {
             @Override void pause(int seconds) { log.add("wait " + seconds); }
             @Override void keyGap() { log.add("gap"); }
+            @Override void waitMs(int ms) { log.add("wait " + ms + " ms"); }
         };
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
 
@@ -156,6 +178,7 @@ public class SceneRunnerTest {
         assert Arrays.equals(run(blind, "X: tv off"), new int[] {1, 1}) && log.equals(Arrays.asList("tv sleep")) : log;
         assert Arrays.equals(run(blind, "X: tv on"), new int[] {1, 1}) && log.equals(Arrays.asList("tv wake")) : log;
 
+
         // The remote on the phone opens, the scene goes on.
         assert Arrays.equals(run(r, "X: phone remote; tv off"), new int[] {2, 2}) && log.equals(Arrays.asList("phone remote", "tv sleep")) : log;
 
@@ -185,6 +208,90 @@ public class SceneRunnerTest {
         log.clear();
         assert Arrays.equals(r.run(Scenes.undo(Scenes.parse("X: music Cucina; light Desk on").get(0))), new int[] {2, 2}) : log;
         assert log.equals(Arrays.asList("spotify pause", "Desk false null null")) : log;
+
+        // A step naming a TV goes to that TV; an unknown TV name isn't done.
+        FakeTv camera = new FakeTv() {
+            @Override void wake() { log.add("camera wake"); }
+            @Override synchronized void key(int code) { log.add("camera key " + code); }
+        };
+        r.tvs(name -> name.equalsIgnoreCase("Camera") ? camera : null);
+        tvPower = State.OFF;
+        assert Arrays.equals(run(r, "X: tv on @Camera; keys home @camera; tv on @Garage; tv on"), new int[] {3, 4}) : log;
+        assert log.equals(Arrays.asList("camera wake", "camera key 3", "tv wake")) : log;
+        answer = "djx"; // "choose when run" on a named TV still asks first
+        run(r, "X: tv on @Camera; tv app com.spotify.tv.android ask @Camera");
+        assert log.get(0).equals("ask com.spotify.tv.android") && log.get(1).equals("camera wake") : log;
+        tvPower = State.ON;
+
+        // Smooth (swaps, turning off): the bulbs' own fade. Off is one command; a light that's on goes off,
+        // a pause while it fades, then one "on" with its new brightness and colour (it fades in once).
+        r.smooth(true);
+        FakeLight desk = (FakeLight) lights.get("Desk");
+        desk.level = 80;
+        run(r, "X: light Desk off");
+        assert log.equals(Arrays.asList("Desk false null null")) : log;
+        desk.level = -1; // off already: straight on
+        run(r, "X: light Desk on 50 warm");
+        assert log.equals(Arrays.asList("Desk on 50 2700")) : log;
+        desk.level = 20;
+        run(r, "X: light Desk on 30 color:210,80");
+        assert log.equals(Arrays.asList("Desk false null null", "wait " + SceneRunner.LIGHT_FADE_MS + " ms", "Desk on 30 null color 210 80"))
+            : log;
+        r.smooth(false);
+        desk.level = -1;
+
+        // The TV hears about scenes (for the launcher's own fade) right before the scene first changes its
+        // picture, then a pause for the fade: which scene, and a swap's previous one. Switching it off says
+        // "tv_off" instead.
+        tvPower = State.ON;
+        signals.clear();
+        r.signal("swap", "Music");
+        run(r, "Movie night: tv off; light Desk on");
+        assert signals.equals(Arrays.asList("tv_off Movie night")) : signals;
+        assert log.equals(Arrays.asList("wait " + SceneRunner.FADE_MS + " ms", "tv sleep", "Desk true null null")) : log;
+        signals.clear();
+        run(r, "Movie night: light Desk on; tv app com.x; keys ok");
+        assert signals.equals(Arrays.asList("swap Movie night from Music", "ready Movie night")) : signals; // once per TV
+        assert log.equals(Arrays.asList("Desk true null null", "wait " + SceneRunner.FADE_MS + " ms", "tv launch com.x", "key "
+            + Scenes.KEYS.get("ok"))) : log;
+        // From off: told before it wakes, no pause (the launcher holds its logo instead).
+        tvPower = State.OFF;
+        signals.clear();
+        r.signal("start", null);
+        run(r, "Movie night: tv on; tv app com.x");
+        assert signals.equals(Arrays.asList("start Movie night", "ready Movie night")) : signals;
+        assert log.equals(Arrays.asList("tv wake", "tv launch com.x")) : log;
+        tvPower = State.ON;
+
+        // With a readable volume the sound fades with the picture: out over FADE_MS, back up over the launcher's reveal.
+        tv.level = 20;
+        signals.clear();
+        run(r, "Movie night: tv app com.x");
+        assert log.get(0).equals("wait " + SceneRunner.FADE_MS / (SceneRunner.FADE_MS / SceneRunner.VOLUME_STEP_MS) + " ms") : log;
+        int launch = log.indexOf("tv launch com.x"), reveal = log.indexOf("await reveal");
+        assert launch > 0 && log.get(launch - 1).equals("tv volume 0") : log;
+        assert reveal > launch && log.get(log.size() - 1).equals("tv volume 20") : log;
+        assert log.subList(launch, reveal).stream().noneMatch(l -> l.startsWith("tv volume")) : log;
+        // From off: silent at once (no fade), back up with the reveal.
+        tvPower = State.OFF;
+        run(r, "Movie night: tv on; tv app com.x");
+        assert log.subList(0, 3).equals(Arrays.asList("tv volume 0", "tv wake", "tv launch com.x")) : log;
+        assert log.get(log.size() - 1).equals("tv volume 20") : log;
+        // Switching it off: the sound fades out, then the level is put back for next time.
+        tvPower = State.ON;
+        run(r, "Bed: tv off");
+        assert log.get(log.size() - 2).equals("tv sleep") && log.get(log.size() - 1).equals("tv volume 20") : log;
+        assert log.contains("tv volume 0") : log;
+        tv.level = -1;
+
+        // The launcher's log line that rxhome follows for the reveal.
+        String line = "11-18 19:30:00.000  1  1 I HomeService: reveal k3x9 5000\n";
+        assert FireTv.parseReveal(line, "k3x9") == 5000 && FireTv.parseReveal(line, "other") == -1;
+
+        signals.clear();
+        run(r, "Lights only: light Desk on");
+        assert signals.isEmpty() : signals; // no TV in it: nothing to tell
+        r.signal(null, null);
 
         // All off reaches every light.
         lights.put("LED strip", new FakeLight("LED strip", false));
