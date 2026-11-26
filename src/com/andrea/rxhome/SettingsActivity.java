@@ -96,6 +96,12 @@ public class SettingsActivity extends Activity {
         Ui.animateLayout(scenesBox);
         col.addView(scenesBox);
 
+        section(col, "Scheduled scenes");
+        timersBox = new LinearLayout(this);
+        timersBox.setOrientation(LinearLayout.VERTICAL);
+        Ui.animateLayout(timersBox);
+        col.addView(timersBox);
+
         error = Ui.text(this, "", 14, Ui.RED, false);
         col.addView(error);
         TextView save = Ui.button(this, "SAVE", true);
@@ -535,12 +541,13 @@ public class SettingsActivity extends Activity {
         });
     }
 
-    private LinearLayout scenesBox;
+    private LinearLayout scenesBox, timersBox;
 
     @Override
     protected void onResume() {
         super.onResume();
         renderScenes(); // back from the scene editor: show what changed
+        renderTimers();
         showTvs(); // ...or from renaming / reordering the TVs
     }
 
@@ -562,7 +569,33 @@ public class SettingsActivity extends Activity {
         sceneRow("+ Add new scene", "", true, v -> openEditor(-1));
     }
 
+    /** A row per scheduled scene (tap to remove its timer). Set them by holding a scene on the home screen. */
+    private void renderTimers() {
+        timersBox.removeAllViews();
+        Map<String, Long> due = SceneTimer.all(cfg);
+        if (due.isEmpty()) {
+            timersBox.addView(Ui.text(this, "None. Hold a scene on the home screen to run it at a set time.", 13, Ui.DIM, false));
+            return;
+        }
+        for (Map.Entry<String, Long> e : due.entrySet()) {
+            String name = e.getKey();
+            row(timersBox, name, "Runs " + SceneTimer.when(this, e.getValue()) + " · tap to remove", false, v ->
+                new android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Remove the timer for " + name + "?")
+                    .setPositiveButton("Remove", (d, w) -> {
+                        SceneTimer.cancel(this, name);
+                        renderTimers();
+                    })
+                    .setNegativeButton("Keep", null)
+                    .show());
+        }
+    }
+
     private void sceneRow(String title, String sub, boolean add, View.OnClickListener open) {
+        row(scenesBox, title, sub, add, open);
+    }
+
+    private void row(LinearLayout box, String title, String sub, boolean add, View.OnClickListener open) {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setBackground(Ui.button(this, "", add).getBackground());
@@ -577,7 +610,7 @@ public class SettingsActivity extends Activity {
         row.setOnClickListener(open);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.bottomMargin = Ui.dp(this, 8);
-        scenesBox.addView(row, lp);
+        box.addView(row, lp);
     }
 
     private void openEditor(int index) {

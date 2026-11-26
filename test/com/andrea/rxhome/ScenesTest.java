@@ -24,6 +24,30 @@ public class ScenesTest {
     }
 
     public static void main(String[] a) throws Exception {
+        // plan: a tap and a timer do the same: start, toggle off, or swap from the active one.
+        List<Scenes.Scene> two = Scenes.parse("A: light all on 50\nB: light all on 80\nOff: light all off");
+        java.util.Set<String> none = java.util.Collections.emptySet(), aOn = java.util.Collections.singleton("A");
+        java.util.List<String> lights = java.util.Collections.singletonList("Lamp");
+        Scenes.Plan p = Scenes.plan(two.get(0), two, none, lights);
+        assert !p.turningOff && p.before == null && p.todo == two.get(0) && p.activeAfter.equals(aOn);
+        p = Scenes.plan(two.get(0), two, aOn, lights);
+        assert p.turningOff && p.activeAfter.isEmpty();
+        p = Scenes.plan(two.get(1), two, aOn, lights);
+        assert !p.turningOff && p.before == two.get(0) && p.activeAfter.equals(java.util.Collections.singleton("B"));
+        p = Scenes.plan(two.get(2), two, aOn, lights); // a plain button: clears the active one
+        assert !p.turningOff && p.before == null && p.activeAfter.isEmpty();
+
+        // Timer times: no day = next time it's that hour; a picked day = that day (passed = in the past, refused).
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        now.set(2026, 10, 26, 20, 0, 0);
+        now.set(java.util.Calendar.MILLISECOND, 0);
+        long h = 3_600_000L;
+        assert Scenes.timerAt(now, null, 21, 30) - now.getTimeInMillis() == 90 * 60_000L;
+        assert Scenes.timerAt(now, null, 19, 0) - now.getTimeInMillis() == 23 * h;   // passed: tomorrow
+        assert Scenes.timerAt(now, null, 20, 0) - now.getTimeInMillis() == 24 * h;   // now: tomorrow
+        assert Scenes.timerAt(now, new int[] {2026, 10, 28}, 20, 0) - now.getTimeInMillis() == 48 * h;
+        assert Scenes.timerAt(now, new int[] {2026, 10, 26}, 19, 0) < now.getTimeInMillis();
+
         List<Scenes.Scene> s = Scenes.parse(Scenes.DEFAULT);
         assert s.size() == 4 : s.size();
         assert s.get(0).name.equals("Movie night");

@@ -394,4 +394,50 @@ final class Scenes {
     private static boolean kelvin(String v) {
         return v.matches("\\d{4}") && Integer.parseInt(v) >= 2500 && Integer.parseInt(v) <= 6500;
     }
+
+    /** What running a scene does now (a tap or its timer). */
+    static final class Plan {
+        final Scene todo, before; // before: the active scene it smoothly swaps from, or null
+        final boolean turningOff;
+        final java.util.Set<String> activeAfter;
+
+        Plan(Scene todo, Scene before, boolean turningOff, java.util.Set<String> activeAfter) {
+            this.todo = todo;
+            this.before = before;
+            this.turningOff = turningOff;
+            this.activeAfter = activeAfter;
+        }
+    }
+
+    /**
+     * A scene that switches things on is a toggle: run while active, it switches them off instead. One
+     * that only switches things off (All off) is a plain button and clears every active scene. One
+     * active scene at a time: another one active means a smooth swap (fades, nothing off-and-on).
+     */
+    static Plan plan(Scene scene, List<Scene> all, java.util.Set<String> active, java.util.Collection<String> lights) {
+        Scene off = undo(scene), before = null;
+        boolean toggle = !off.steps.isEmpty(), turningOff = toggle && active.contains(scene.name);
+        if (toggle && !turningOff) {
+            for (Scene o : all) if (!o.name.equals(scene.name) && active.contains(o.name)) before = o;
+        }
+        Scene todo = turningOff ? off : before != null ? swap(before, scene, lights) : scene;
+        java.util.Set<String> after = new java.util.LinkedHashSet<>();
+        if (toggle && !turningOff) after.add(scene.name); // the only active one now
+        return new Plan(todo, before, turningOff, after);
+    }
+
+    /**
+     * When a timer set to hour:minute runs: on the picked day ({year, month 0-based, day}), or with no
+     * day the next time it's that hour (today, or tomorrow if it has passed).
+     */
+    static long timerAt(java.util.Calendar now, int[] day, int hour, int minute) {
+        java.util.Calendar c = (java.util.Calendar) now.clone();
+        if (day != null) c.set(day[0], day[1], day[2]);
+        c.set(java.util.Calendar.HOUR_OF_DAY, hour);
+        c.set(java.util.Calendar.MINUTE, minute);
+        c.set(java.util.Calendar.SECOND, 0);
+        c.set(java.util.Calendar.MILLISECOND, 0);
+        if (day == null && !c.after(now)) c.add(java.util.Calendar.DAY_OF_MONTH, 1);
+        return c.getTimeInMillis();
+    }
 }

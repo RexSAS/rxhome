@@ -74,6 +74,9 @@ public class MainActivity extends Activity {
         // Watches Wi-Fi changes and which app is in front while you use rxhome or Jellyfin.
         startForegroundService(new Intent(this, TunnelWatch.class));
         renderParts(); // Settings may have changed the lights or scenes
+        registerReceiver(timers, new android.content.IntentFilter(SceneTimer.CHANGED));
+        saveActive(activeScenes()); // a timer may have run while rxhome was away
+        showClocks(); // ...or been removed in Settings
         if (!cfg.get(POWER_MODE).isEmpty()) followPower();
         if (splashPending) {
             splashPending = false;
@@ -92,6 +95,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         if (onScreen == this) onScreen = null;
+        unregisterReceiver(timers);
         main.removeCallbacks(autoUpdate); // only while rxhome is on screen
         super.onPause();
     }
@@ -1057,11 +1061,29 @@ public class MainActivity extends Activity {
     // --- scenes ---
 
     private final Map<String, TextView> sceneButtons = new java.util.HashMap<>();
+    private final Map<String, android.widget.ImageView> sceneClocks = new java.util.HashMap<>();
+
+    /** The yellow clock on each scheduled scene, and when it runs for TalkBack. */
+    private void showClocks() {
+        Map<String, Long> due = SceneTimer.all(cfg);
+        for (Map.Entry<String, android.widget.ImageView> e : sceneClocks.entrySet()) {
+            Long at = due.get(e.getKey());
+            e.getValue().setVisibility(at == null ? View.GONE : View.VISIBLE);
+            TextView b = sceneButtons.get(e.getKey());
+            if (b != null) b.setContentDescription(at == null ? null : e.getKey() + ", scheduled " + when(at));
+        }
+    }
+
+    /** A timer started or finished its scene while rxhome is open. */
+    private final android.content.BroadcastReceiver timers = new android.content.BroadcastReceiver() {
+        @Override public void onReceive(android.content.Context c, Intent i) {
+            saveActive(activeScenes()); // its run may have switched scenes on or off
+            showClocks();
+        }
+    };
 
     private java.util.Set<String> activeScenes() {
-        java.util.Set<String> s = new java.util.LinkedHashSet<>();
-        for (String n : cfg.get(Config.SCENES_ACTIVE).split("\n")) if (!n.trim().isEmpty()) s.add(n.trim());
-        return s;
+        return SceneTimer.active(cfg);
     }
 
     /** The active scene, or null. */
@@ -1112,14 +1134,31 @@ public class MainActivity extends Activity {
             sceneButtons.put(scene.name, b);
             b.setMinHeight(Ui.dp(this, 64));
             b.setOnClickListener(v -> runScene(b, scene));
+            b.setOnLongClickListener(v -> {
+                Ui.haptic(v);
+                askTimer(scene.name);
+                return true;
+            });
+            // A small yellow clock in the top right corner while the scene has a timer.
+            android.widget.FrameLayout cell = new android.widget.FrameLayout(this);
+            cell.addView(b, new android.widget.FrameLayout.LayoutParams(-1, -2));
+            android.widget.ImageView clock = new android.widget.ImageView(this);
+            clock.setImageResource(R.drawable.ic_clock);
+            clock.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); // said by the button instead
+            int cs = Ui.dp(this, 14), cm = Ui.dp(this, 7);
+            android.widget.FrameLayout.LayoutParams clp = new android.widget.FrameLayout.LayoutParams(cs, cs, android.view.Gravity.TOP | android.view.Gravity.END);
+            clp.setMargins(0, cm, cm, 0);
+            cell.addView(clock, clp);
+            sceneClocks.put(scene.name, clock);
             // Own height (min 64 dp), not the row's: an odd last row holds only this and an empty
             // filler, and "as tall as the row" collapsed it to the filler's height.
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
             if (i % 2 == 0) lp.rightMargin = Ui.dp(this, 8);
-            row.addView(b, lp);
+            row.addView(cell, lp);
         }
         // Keep an odd last scene half-width, like the others.
         if (list.size() % 2 == 1) row.addView(new View(this), new LinearLayout.LayoutParams(0, 0, 1));
+        showClocks();
         return col;
     }
 
@@ -1163,44 +1202,80 @@ public class MainActivity extends Activity {
         return pick[0];
     }
 
+    /** Long press on a scene: the time on Android's clock dial (and a day, if you want); the alarm runs it with rxhome closed too. */
+    private void askTimer(String scene) {
+        long due = SceneTimer.due(cfg, scene);
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        if (due > 0) c.setTimeInMillis(due);
+        askTimer(scene, null, c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE));
+    }
+
+    /** day: {year, month (0-based), day of month} picked, or null = the next time it's that hour. */
+    private void askTimer(String scene, int[] day, int hour, int minute) {
+        long due = SceneTimer.due(cfg, scene);
+        android.app.TimePickerDialog d = new android.app.TimePickerDialog(this, (v, h, m) -> {
+            long at = Scenes.timerAt(java.util.Calendar.getInstance(), day, h, m);
+            if (at <= System.currentTimeMillis()) {
+                toast("That time has passed");
+                askTimer(scene, day, h, m);
+                return;
+            }
+            SceneTimer.schedule(this, scene, at);
+            showClocks();
+            toast(scene + " runs " + when(at));
+        }, hour, minute, android.text.format.DateFormat.is24HourFormat(this));
+        d.setTitle(day == null ? "Run " + scene + " at" : "Run " + scene + " on " + dayLabel(day));
+        d.setButton(android.content.DialogInterface.BUTTON_NEUTRAL, day == null ? "Pick day" : "Change day", (x, w) -> {
+            java.util.Calendar c = java.util.Calendar.getInstance();
+            if (day != null) c.set(day[0], day[1], day[2]);
+            android.app.DatePickerDialog dp = new android.app.DatePickerDialog(this,
+                (v, y, mo, dd) -> askTimer(scene, new int[] {y, mo, dd}, hour, minute),
+                c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH), c.get(java.util.Calendar.DAY_OF_MONTH));
+            dp.getDatePicker().setMinDate(System.currentTimeMillis() - 1000);
+            dp.show();
+        });
+        if (due > 0) {
+            d.setButton(android.content.DialogInterface.BUTTON_NEGATIVE, "Remove timer (" + when(due) + ")", (x, w) -> {
+                SceneTimer.cancel(this, scene);
+                showClocks();
+                toast(scene + ": timer removed");
+            });
+        }
+        d.show();
+    }
+
+    private static String dayLabel(int[] day) {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.set(day[0], day[1], day[2]);
+        return android.text.format.DateFormat.format("EEE d MMM", c).toString();
+    }
+
+    private String when(long at) {
+        return SceneTimer.when(this, at);
+    }
+
     private void runScene(TextView b, Scenes.Scene scene) {
         if (!b.isEnabled()) return;
         Ui.haptic(b);
         b.setEnabled(false);
-        // A scene that switches things on is a toggle: tapped while active, it switches them off instead.
-        // One that only switches things off (All off) is a plain button and clears every active scene.
-        // One active scene at a time: another one active means a smooth swap (fades, nothing off-and-on).
-        Scenes.Scene off = Scenes.undo(scene), before = null;
-        boolean toggle = !off.steps.isEmpty(), turningOff = toggle && activeScenes().contains(scene.name);
-        if (toggle && !turningOff) {
-            try {
-                for (Scenes.Scene o : Scenes.parse(cfg.get(Config.SCENES))) {
-                    if (!o.name.equals(scene.name) && activeScenes().contains(o.name)) before = o;
-                }
-            } catch (ParseException e) {
-                // Unreadable scenes: nothing to swap from.
-            }
+        java.util.List<Scenes.Scene> all;
+        try {
+            all = Scenes.parse(cfg.get(Config.SCENES));
+        } catch (ParseException e) {
+            all = java.util.Collections.singletonList(scene); // unreadable scenes: nothing to swap from
         }
-        Scenes.Scene todo = turningOff ? off : before != null ? Scenes.swap(before, scene, cfg.lights().keySet()) : scene;
-        b.setText(turningOff ? "Turning off…" : before != null ? "Switching…" : "Running…");
+        Scenes.Plan plan = Scenes.plan(scene, all, activeScenes(), cfg.lights().keySet());
+        boolean turningOff = plan.turningOff;
+        Scenes.Scene todo = plan.todo;
+        b.setText(turningOff ? "Turning off…" : plan.before != null ? "Switching…" : "Running…");
         android.animation.ValueAnimator shimmer = Ui.shimmer(b);
-        String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
-        java.util.List<Tvs.Saved> tvs = cfg.saved(); // a step without "@Name" is for the first TV
-        SceneRunner runner = new SceneRunner(cfg.lights(), tvs.isEmpty() ? null : cfg.tv(tvs.get(0)), cfg.switchBot(), cfg.get(Config.SB_BOT),
-            () -> Server.effective(Server.status(server, pub), stats(server, pub) != null),
-            cfg.jellyfin(), this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))))
-            .music(cfg.spotify())
-            .tvs(cfg::tvNamed)
-            .smooth(turningOff || before != null)
-            .signal(turningOff ? "off" : before != null ? "swap" : "start", before == null ? null : before.name);
+        SceneRunner runner = SceneTimer.runner(cfg, plan, this::askWhat, () -> ui(() -> startActivity(new Intent(this, RemoteActivity.class))));
         io.execute(() -> {
             int[] r = runner.run(todo);
             ui(() -> {
                 shimmer.cancel();
                 Ui.pop(b);
-                java.util.Set<String> act = new java.util.LinkedHashSet<>();
-                if (toggle && !turningOff) act.add(scene.name); // the only active one now
-                saveActive(act);
+                saveActive(plan.activeAfter);
                 b.setText(r[0] == r[1] ? (turningOff ? "Off" : "Done") : r[0] + "/" + r[1] + " done");
                 main.postDelayed(() -> { b.setText(scene.name); b.setEnabled(true); }, 3000);
                 refresh();
