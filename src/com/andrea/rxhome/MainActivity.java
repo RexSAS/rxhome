@@ -48,6 +48,8 @@ public class MainActivity extends Activity {
     private long vpnTriedAt, scannedAt;
     private boolean splashPending;
     private String vpnNote; // shown on the server card while WireGuard connects, or why it didn't
+    private boolean probing; // probeTunnel running
+    private boolean tunnelDead; // the tunnel couldn't reach home: the server is off (shown as OFF)
     private final Map<String, LightRow> rows = new LinkedHashMap<>();
 
     @Override
@@ -299,13 +301,16 @@ public class MainActivity extends Activity {
     private void paintServer() {
         if (openJellyfin == null) return; // the card is still being built (remembered stats come first)
         State s = shownServer;
-        if (s == State.ON) vpnNote = null;
+        if (s == State.ON) {
+            vpnNote = null;
+            tunnelDead = false;
+        }
         openJellyfin.setVisibility(s == State.ON && serverFresh && getPackageManager().getLaunchIntentForPackage(Vpn.JELLYFIN) != null
             ? View.VISIBLE : View.GONE);
         String mode = cfg.get(POWER_MODE);
         if (!mode.isEmpty()) {
             long elapsed = System.currentTimeMillis() - parseLong(cfg.get(POWER_AT));
-            String now = serverFresh ? Server.label(s, statsSeen, homeSeen) : "";
+            String now = serverFresh ? Server.label(s, statsSeen, homeSeen || tunnelDead) : "";
             if (mode.equals("on") && now.equals("online")) {
                 cfg.put(Config.BOOTS, Boot.record(cfg.get(Config.BOOTS), elapsed)); // learn this boot's time
                 cfg.put(POWER_MODE, "");
@@ -328,7 +333,7 @@ public class MainActivity extends Activity {
             serverRing.set(StatusRing.BUSY);
             return;
         }
-        String label = Server.label(s, statsSeen, homeSeen);
+        String label = Server.label(s, statsSeen, homeSeen || tunnelDead);
         serverStatus.setText(label.equals("online") ? "ONLINE" : label.equals("starting") ? "STARTING…"
             : label.equals("off") ? "OFF" : vpnNote != null ? vpnNote : "Status unknown: off, or not on home Wi-Fi / WireGuard");
         serverStatus.setTextColor(label.equals("online") ? Ui.GREEN : label.equals("off") ? Ui.RED
@@ -393,9 +398,22 @@ public class MainActivity extends Activity {
         boolean wasOnline = serverFresh && shownServer == State.ON;
         io.execute(() -> {
             try {
-                sb.command(bot, "press");
+                try {
+                    sb.command(bot, "press");
+                } catch (IOException e) {
+                    // Away with the server off, the tunnel ends on it and swallows the call to SwitchBot's
+                    // cloud: drop the tunnel (whoever started it) and try once more over plain internet.
+                    if (!SwitchBot.neverSent(e) || !vpnActive()) throw e;
+                    System.err.println("rxhome-vpn: SwitchBot unreachable through the tunnel (" + e + "): switching " + Vpn.TUNNEL + " off");
+                    ui(() -> serverStatus.setText("Can't reach SwitchBot through WireGuard: switching it off and retrying…"));
+                    sendBroadcast(new Intent(Vpn.ACTION_DOWN).setPackage(Vpn.PACKAGE).putExtra("tunnel", Vpn.TUNNEL));
+                    cfg.put(TunnelWatch.OURS, "");
+                    for (int i = 0; i < 10 && vpnActive(); i++) android.os.SystemClock.sleep(500);
+                    sb.command(bot, "press");
+                }
                 cfg.put(POWER_MODE, wasOnline ? "off" : "on");
                 cfg.put(POWER_AT, Long.toString(System.currentTimeMillis()));
+                vpnTriedAt = android.os.SystemClock.elapsedRealtime(); // tunnel again in a minute, once it's booted
                 ui(() -> {
                     toast("Pressed the server's power button");
                     followPower();
@@ -1200,8 +1218,9 @@ public class MainActivity extends Activity {
         genHome = null;
         String server = cfg.get(Config.SERVER), pub = cfg.get(Config.SERVER_PUBLIC);
         java.util.List<String> home = cfg.homeDevices();
+        boolean vpn = vpnActive();
         io.execute(() -> {
-            boolean h = Discovery.anyAnswers(home, 1500);
+            boolean h = cfg.atHome(home, vpn);
             ui(() -> {
                 if (gen != generation) return;
                 genHome = h;
@@ -1305,7 +1324,13 @@ public class MainActivity extends Activity {
     /** Away from home (server and FireStick both silent): switch on the "rxfilms" WireGuard tunnel. */
     private void maybeVpn(State server, State stick) {
         long now = android.os.SystemClock.elapsedRealtime();
-        if (!Vpn.shouldStart(Boolean.TRUE.equals(genHome), server == State.ON, now, vpnTriedAt)) return;
+        boolean home = Boolean.TRUE.equals(genHome), on = server == State.ON, vpn = vpnActive();
+        if (home || on) return;
+        if (vpn) { // up already (TunnelWatch, an earlier try) yet home silent: is it a dead one?
+            if (!probing) probeTunnel(0, 0);
+            return;
+        }
+        if (!Vpn.shouldStart(home, on, now, vpnTriedAt)) return;
         vpnTriedAt = now;
         if (checkSelfPermission(Vpn.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[] {Vpn.PERMISSION}, 1);
@@ -1316,18 +1341,63 @@ public class MainActivity extends Activity {
         sendBroadcast(new Intent(Vpn.ACTION_UP).setPackage(Vpn.PACKAGE).putExtra("tunnel", Vpn.TUNNEL));
         // rxhome's tunnel: TunnelWatch may switch it off again (home Wi-Fi, or rxhome and Jellyfin left).
         cfg.put(TunnelWatch.OURS, "1");
+        tunnelDead = false;
         vpnNote = "Away from home: connecting WireGuard (" + Vpn.TUNNEL + ")…";
         showServer(State.UNREACHABLE, false);
-        // The handshake home can take ~20 s: keep checking every 3 s for 30 s, until the server answers.
-        for (int i = 1; i <= 10; i++) {
-            main.postDelayed(() -> { if (genServer != State.ON && !isDestroyed()) refresh(); }, i * 3000L);
-        }
+        if (!probing) probeTunnel(0, 0);
         main.postDelayed(() -> {
             if (isDestroyed() || vpnActive()) return;
             System.err.println("rxhome-vpn: no VPN 6 s after asking");
             vpnNote = "WireGuard didn't start: set its battery use to Unrestricted (Settings → Apps → WireGuard → Battery) and turn on \"Allow remote control apps\" in WireGuard";
             showServer(State.UNREACHABLE, false);
         }, 6000);
+    }
+
+    /**
+     * Every second, while the tunnel comes up: the server or a home device answering = it works (full
+     * refresh). Up for Vpn.HANDSHAKE_MS with all silent = dead: the server, WireGuard's end, is off.
+     * upAt: when the VPN was first seen up (0 = not yet), so a slow WireGuard start doesn't count.
+     */
+    private void probeTunnel(int tries, long upAt) {
+        probing = tries < 20 && !isDestroyed(); // WireGuard that hasn't come up in 20 s: the 6 s note says why
+        if (!probing) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        long up = vpnActive() ? (upAt == 0 ? now : upAt) : 0;
+        java.util.List<String> home = cfg.homeDevices();
+        try {
+            java.net.URL u = new java.net.URL(cfg.get(Config.SERVER));
+            home.add(u.getHost() + ":" + (u.getPort() > 0 ? u.getPort() : 80));
+        } catch (java.net.MalformedURLException e) {
+            // No server address: the other devices still tell.
+        }
+        io.execute(() -> {
+            boolean h = Discovery.anyAnswers(home, 900);
+            ui(() -> {
+                if (h) {
+                    probing = false;
+                    refresh();
+                } else if (Vpn.dead(up, now)) {
+                    probing = false;
+                    tunnelDead();
+                } else {
+                    main.postDelayed(() -> probeTunnel(tries + 1, up), 1000);
+                }
+            });
+        });
+    }
+
+    /** The tunnel can't connect: the server is off. Drop it (so the SwitchBot cloud gets through) and say OFF. */
+    private void tunnelDead() {
+        System.err.println("rxhome-vpn: tunnel up but home silent: the server (WireGuard's end) is off");
+        if ("1".equals(cfg.get(TunnelWatch.OURS))) {
+            sendBroadcast(new Intent(Vpn.ACTION_DOWN).setPackage(Vpn.PACKAGE).putExtra("tunnel", Vpn.TUNNEL));
+            cfg.put(TunnelWatch.OURS, "");
+        }
+        long now = android.os.SystemClock.elapsedRealtime();
+        vpnTriedAt = now + Vpn.DEAD_RETRY_MS - Vpn.RETRY_MS; // next try in 5 min (or on power press / reopening)
+        tunnelDead = true;
+        vpnNote = null;
+        showServer(State.UNREACHABLE, false);
     }
 
     /** True if Android has a VPN up (any app's). */

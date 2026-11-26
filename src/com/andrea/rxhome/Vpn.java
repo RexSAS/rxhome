@@ -14,6 +14,8 @@ final class Vpn {
     static final String ACTION_DOWN = "com.wireguard.android.action.SET_TUNNEL_DOWN";
     static final String JELLYFIN = "org.jellyfin.mobile";
     static final long GRACE_MS = 10_000;
+    static final long HANDSHAKE_MS = 5_000;
+    static final long DEAD_RETRY_MS = 5 * 60_000;
 
     private Vpn() {}
 
@@ -34,5 +36,13 @@ final class Vpn {
 
     static boolean shouldStart(boolean homeSeen, boolean serverOn, long now, long lastTry) {
         return !homeSeen && !serverOn && now - lastTry >= RETRY_MS;
+    }
+
+    /**
+     * The tunnel ends on the server: a live one answers WireGuard's first handshake within a second, and
+     * WireGuard retries every 5 s. Up that long with home still silent = the server is off.
+     */
+    static boolean dead(long upAt, long now) {
+        return upAt > 0 && now - upAt >= HANDSHAKE_MS;
     }
 }

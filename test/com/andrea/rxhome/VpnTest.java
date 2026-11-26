@@ -11,6 +11,14 @@ public class VpnTest {
         assert !Vpn.shouldStart(false, false, now, now - 30_000);
         assert Vpn.shouldStart(false, false, now, now - 61_000);
         assert Vpn.TUNNEL.equals("rxfilms");
+        // The server is the WireGuard end: VPN up 5 s with home still silent = server off, tunnel dead.
+        assert Vpn.dead(now - 5_000, now);
+        assert !Vpn.dead(now - 3_000, now); // still handshaking
+        assert !Vpn.dead(0, now);           // the VPN isn't up yet (WireGuard starting)
+
+        // Cloudflare's whitelist: through (even to a down server, 52x) = no tunnel needed; 403 or nothing = tunnel.
+        assert Server.passes(200) && Server.passes(521) && Server.passes(522) && Server.passes(502);
+        assert !Server.passes(403) && !Server.passes(-1);
 
         // Auto-off: the tunnel stays while rxhome or Jellyfin is in front (screen on).
         assert Vpn.ours("com.andrea.rxhome") && Vpn.ours("org.jellyfin.mobile");

@@ -35,6 +35,34 @@ final class Server {
         return State.UNREACHABLE;
     }
 
+    /** The HTTP status of the public info page, or -1 if nothing answered (no network, dead tunnel). */
+    static int code(String baseUrl) {
+        if (baseUrl == null || baseUrl.isEmpty()) return -1;
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(baseUrl + "/System/Info/Public").openConnection();
+            c.setConnectTimeout(1500);
+            c.setReadTimeout(3000);
+            c.connect(); // TLS to Cloudflare's edge: only says the internet works
+            try {
+                return c.getResponseCode();
+            } catch (java.net.SocketTimeoutException e) {
+                // Its whitelist block is instant; a wait means it let us through and waits on a dead server
+                // (its 522 comes after ~15 s).
+                return 522;
+            }
+        } catch (Exception e) {
+            return -1;
+        } finally {
+            if (c != null) c.disconnect();
+        }
+    }
+
+    /** Cloudflare's whitelist let us through: anything but its 403 block (52x = through, server down). */
+    static boolean passes(int code) {
+        return code > 0 && code != 403;
+    }
+
     private static State one(String baseUrl) {
         HttpURLConnection c = null;
         try {

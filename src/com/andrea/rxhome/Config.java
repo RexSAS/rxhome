@@ -191,6 +191,17 @@ final class Config {
         return out;
     }
 
+    /**
+     * No tunnel needed here: a home device answers, or Cloudflare lets us through to the server (its IP
+     * whitelist: home and the houses on it). With the server off Cloudflare still tells: 52x = let
+     * through to a down server (so it shows OFF), 403 = blocked by the whitelist (tunnel).
+     */
+    boolean atHome(java.util.List<String> devices, boolean vpnUp) {
+        if (Discovery.anyAnswers(devices, 1500)) return true;
+        // Through the tunnel we leave from home, so the whitelist proves nothing.
+        return !vpnUp && Server.passes(Server.code(get(SERVER_PUBLIC)));
+    }
+
     /** For Settings: what was found. */
     String foundLine() {
         return "Server found on this Wi-Fi at " + get(SERVER).replace("http://", "") + ". Found again automatically if it moves.";

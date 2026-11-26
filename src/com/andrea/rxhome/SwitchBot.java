@@ -39,6 +39,16 @@ class SwitchBot {
         check(request("POST", API + "/" + deviceId + "/commands", body));
     }
 
+    /**
+     * The request never left the phone (no DNS, no connection), so retrying can't press twice. A read
+     * timeout may have pressed already: not retried, a second press could switch the server off.
+     */
+    static boolean neverSent(IOException e) {
+        return e instanceof java.net.UnknownHostException || e instanceof java.net.ConnectException
+            || e instanceof java.net.NoRouteToHostException
+            || e instanceof java.net.SocketTimeoutException && String.valueOf(e.getMessage()).contains("connect");
+    }
+
     private String request(String method, String url, String body) throws IOException {
         long t = System.currentTimeMillis();
         String nonce = UUID.randomUUID().toString();

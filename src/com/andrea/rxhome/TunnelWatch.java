@@ -115,7 +115,7 @@ public class TunnelWatch extends Service {
             // No server address: the other devices still tell.
         }
         io.execute(() -> {
-            boolean h = Discovery.anyAnswers(home, 1500);
+            boolean h = cfg.atHome(home, vpn);
             main.post(() -> {
                 System.err.println("rxhome-vpn: home answers: " + h);
                 if (Vpn.wantUp(h, front, vpn)) up();
