@@ -75,7 +75,7 @@ public class MainActivity extends Activity {
         startForegroundService(new Intent(this, TunnelWatch.class));
         renderParts(); // Settings may have changed the lights or scenes
         registerReceiver(timers, new android.content.IntentFilter(SceneTimer.CHANGED));
-        saveActive(activeScenes()); // a timer may have run while rxhome was away
+        showActive(); // a timer may have run while rxhome was away
         showClocks(); // ...or been removed in Settings
         if (!cfg.get(POWER_MODE).isEmpty()) followPower();
         if (splashPending) {
@@ -108,6 +108,8 @@ public class MainActivity extends Activity {
 
         @Override public void run() {
             if (isDestroyed()) return;
+            showActive(); // also catches a timer's run if its broadcast was missed
+            showClocks();
             if (++n % 3 == 0) refresh();
             else loadMusic();
             main.postDelayed(this, AUTO_MS);
@@ -1077,7 +1079,7 @@ public class MainActivity extends Activity {
     /** A timer started or finished its scene while rxhome is open. */
     private final android.content.BroadcastReceiver timers = new android.content.BroadcastReceiver() {
         @Override public void onReceive(android.content.Context c, Intent i) {
-            saveActive(activeScenes()); // its run may have switched scenes on or off
+            showActive(); // its run may have switched scenes on or off
             showClocks();
         }
     };
@@ -1106,6 +1108,12 @@ public class MainActivity extends Activity {
 
     private void saveActive(java.util.Set<String> s) {
         cfg.put(Config.SCENES_ACTIVE, String.join("\n", s));
+        showActive();
+    }
+
+    /** Lights the active scenes' buttons from what's saved (a timer may have changed it), saving nothing. */
+    private void showActive() {
+        java.util.Set<String> s = activeScenes();
         for (Map.Entry<String, TextView> e : sceneButtons.entrySet()) Ui.style(e.getValue(), s.contains(e.getKey()));
     }
 

@@ -110,6 +110,17 @@ public class SettingsActivity extends Activity {
         lp.topMargin = Ui.dp(this, 16);
         col.addView(save, lp);
 
+        String version;
+        try {
+            version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            version = "?";
+        }
+        TextView v = Ui.text(this, "rxhome v" + version, 12, Ui.DIM, false);
+        v.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        v.setPadding(0, Ui.dp(this, 16), 0, Ui.dp(this, 8));
+        col.addView(v);
+
         Ui.cascade(col, 0); // cards rise in one after another
         ScrollView s = new ScrollView(this);
         s.addView(col);

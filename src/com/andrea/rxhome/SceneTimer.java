@@ -129,7 +129,9 @@ public class SceneTimer extends Service {
                 Scenes.Plan p = Scenes.plan(scene, all, active(cfg), cfg.lights().keySet());
                 // No one to ask from a timer: a "choose when run" step is skipped.
                 int[] r = runner(cfg, p, pkg -> null, () -> {}).run(p.todo);
-                cfg.put(Config.SCENES_ACTIVE, String.join("\n", p.activeAfter));
+                cfg.prefs.edit().putString(Config.SCENES_ACTIVE, String.join("\n", p.activeAfter)).commit(); // on disk before the run ends
+                System.err.println("rxhome-timer: " + name + (p.turningOff ? " off" : " on") + ", " + r[0] + "/" + r[1]
+                    + " steps; active now: [" + String.join(", ", active(cfg)) + "]");
                 return name + (p.turningOff ? " off" : "") + (r[0] == r[1] ? ": done" : ": " + r[0] + "/" + r[1] + " done");
             }
             return name + ": timer skipped, the scene no longer exists";
